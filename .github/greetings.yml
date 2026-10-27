@@ -7,8 +7,9 @@
 #   - Assignation automatique au mainteneur.
 #   - Label automatique pour identifier les nouveaux arrivants.
 # ═══════════════════════════════════════════════════════════════════════════════
-name: "🤝 Greetings Protocol"
+name: " Greetings Protocol"
 on:
+
   issues:
     types: [opened]
   pull_request_target:
@@ -18,7 +19,10 @@ permissions:
   pull-requests: write
 jobs:
   greeting:
-    name: "👋 First Interaction"
+    name: "
+		
+		
+		First Interaction"
     runs-on: ubuntu-latest
     steps:
       - name: Welcome First-Timer
@@ -26,14 +30,14 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           issue-message: |
-            👋 Bienvenue dans l'écosystème **Nexus Quantum**, bâtisseur !
+             Bienvenue dans l'écosystème **Nexus Quantum**, bâtisseur !
             Ce dépôt applique le protocole de souveraineté. Avant de contribuer, assure-toi de respecter le manifeste :
             - Zéro télémétrie.
             - Code auditable et testé.
             - Pas de secrets en clair.
             Ton issue a été assignée à l'architecte `@Aissamohammedi88`. Prépare tes arguments.
           pr-message: |
-            🛡️ **Pull Request reçue.**
+             **Pull Request reçue.**
             Analyse en cours par le superviseur Polinascience (Intégrité, Cohérence, Qualité, Sécurité).
             Ton code sera compilé et testé en local-first.
             Si le score est < 60/100, la PR sera rejetée sans sommation. Fais de ton mieux, pas de ton minimum.
