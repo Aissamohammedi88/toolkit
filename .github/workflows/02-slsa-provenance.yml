@@ -1,0 +1,46 @@
+name: "🧬 SLSA Provenance (Level 3)"
+
+on:
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: read
+  id-token: write # OBLIGATOIRE pour l'OIDC (signature cryptographique)
+  actions: read
+
+jobs:
+  # Étape 1 : Le build produit les artefacts et calcule leurs hashes.
+  build:
+    name: "🔨 Build Artifacts"
+    runs-on: ubuntu-latest
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      
+      - name: "Compilation du projet"
+        run: |
+          mkdir -p dist
+          echo "binary-content" > dist/myapp-linux-amd64
+          echo "binary-content-arm" > dist/myapp-darwin-arm64
+          
+      - name: "Calcul des hashes SHA256"
+        id: hash
+        run: |
+          # Le base64 est requis par le générateur SLSA
+          cd dist && sha256sum * | base64 -w0 > hashes.txt
+          echo "hashes=$(cat hashes.txt)" >> "$GITHUB_OUTPUT"
+
+  # Étape 2 : Le générateur SLSA (un job isolé) signe l'attestation.
+  # Ce job utilise l'identité OIDC du runner, pas la tienne. C'est ce qui rend l'attestation infalsifiable.
+  provenance:
+    name: "🔏 Generate Provenance"
+    needs: [build]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.10.0
+    with:
+      base64-subjects: "${{ needs.build.outputs.hashes }}"
