@@ -14,7 +14,7 @@ concurrency:
   group: nexus-audit-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  # ─── JOB 1 : DÉTECTION DE STACK ─────────────────────────────────────────────
+
   detect-stack:
     runs-on: ubuntu-latest
     outputs:
