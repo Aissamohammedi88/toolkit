@@ -24,7 +24,6 @@ jobs:
             VOTE="REVIEW"
             REASON="Critical dependency changed"
           fi
-  
           echo "VOTE=$VOTE" >> $GITHUB_OUTPUT
           echo "REASON=$REASON" >> $GITHUB_OUTPUT
       - name: Agent QUALITY — Vote
@@ -33,16 +32,13 @@ jobs:
           # L'agent qualité vérifie le code
           VOTE="APPROVE"
           REASON="All lint checks pass"
-          
           # Vérifie les TODOs critiques
           if git diff origin/main | grep -qE '^\+.*(TODO|FIXME|HACK)'; then
             VOTE="REVIEW"
             REASON="Critical TODOs added"
           fi
-          
           echo "VOTE=$VOTE" >> $GITHUB_OUTPUT
           echo "REASON=$REASON" >> $GITHUB_OUTPUT
-
       - name: Agent PERFORMANCE — Vote
         id: performance
         run: |
