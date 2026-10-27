@@ -54,8 +54,8 @@ jobs:
           print(f"  THRESHOLD: {type(env_vars['THRESHOLD']).__name__}")
           EOF         
           python validator.py
-        -=name: Generate Cryptographic Proof (2027 Standard)
-        run: |
+          name: Generate Cryptographic Proof (2026 Standard)
+           run: |
           # On hash le fichier YAML pour prouver son intégrité
           YAML_HASH=$(sha256sum .github/workflows/axiom-truth.yml | awk '{print $1}')
           {
@@ -74,7 +74,7 @@ jobs:
             echo "\`\`\`"
             echo ""
             echo "> ✅ *The YAML parser is fully compliant with specification 1.2.*"
-          } >> $GITHUB_STEP_SUMMARY
+           } >> $GITHUB_STEP_SUMMARY
   # ─── JOB 2 : ADVANCED YAML 1.2 FEATURES ─────────────────────────────────────
   advanced_syntax:
     <<: *base_config
@@ -86,7 +86,6 @@ jobs:
           # En YAML 1.2, le style "Flow" est identique à JSON
           FLOW_CONFIG='{"matrix": ["linux", "macos"], "enabled": true}'
           echo "Flow config: $FLOW_CONFIG"
-          
       - name: Test Multiline Strings
         run: |
           # Le pipe (|) préserve les sauts de ligne. Le > les replie.
