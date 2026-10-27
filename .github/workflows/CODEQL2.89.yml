@@ -8,14 +8,11 @@
 # It validates the YAML 1.2 specification (tags, anchors, aliases, merges) 
 # and outputs a verifiable JSON manifest of the parsed types.
 # ═══════════════════════════════════════════════════════════════════════════════
-
----
 name: "Truth Proof 2027"
 on:
   push:
     branches: [ "main", "master" ]
   workflow_dispatch:
-
 # ─── YAML 1.2 ANCHORS & ALIASES ───────────────────────────────────────────────
 # We define a base configuration block once.
 _base_config: &base_config
@@ -30,23 +27,19 @@ _base_config: &base_config
     IS_PRODUCTION: !!bool true
     # Force float type
     THRESHOLD: !!float 3.14159
-
 jobs:
   # ─── JOB 1 : SYNTAX & SEMANTIC PROOF ────────────────────────────────────────
   verify_axioms:
     # Merge the base config using the << Merge Key
     <<: *base_config
     name: "🔬 Semantic Type Validation"
-    
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Verify YAML 1.2 Types via Python
         run: |
           # On installe le parser PyYAML (conforme 1.2)
@@ -56,12 +49,9 @@ jobs:
           cat << 'EOF' > validator.py
           import yaml
           import sys
-
           with open(".github/workflows/axiom-truth.yml", "r") as f:
               doc = yaml.safe_load(f)
-
           env_vars = doc["jobs"]["verify_axioms"]["env"]
-
           # Assertions de typage strict
           assert isinstance(env_vars["APP_VERSION"], str), "APP_VERSION is not a string"
           assert isinstance(env_vars["BUILD_ID"], int), "BUILD_ID is not an integer"
@@ -99,13 +89,11 @@ jobs:
             echo ""
             echo "> ✅ *The YAML parser is fully compliant with specification 1.2.*"
           } >> $GITHUB_STEP_SUMMARY
-
   # ─── JOB 2 : ADVANCED YAML 1.2 FEATURES ─────────────────────────────────────
   advanced_syntax:
     <<: *base_config
     name: "⚙️ Advanced YAML 1.2 (Multiline & Flow)"
     needs: verify_axioms
-    
     steps:
       - name: Test Flow Style (JSON-compatible YAML)
         run: |
