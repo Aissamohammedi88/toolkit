@@ -1,7 +1,6 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # NEXUS SUPREME SECURITY SCANNER
 # ═══════════════════════════════════════════════════════════════════════════════
-#
 # "CodeQL finds data flows. We find what CodeQL ignores."
 # This workflow adds 5 layers of security that CodeQL does not cover:
 #   1. Secret Scanning (Gitleaks) - detects leaked API keys.
