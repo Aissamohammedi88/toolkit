@@ -1,13 +1,35 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # NEXUS CODE HEALER — Self-Healing Code Agent
-# ═══════════════════════════════════════════════════════════════════════════════ 
-# "Don't just find the bug. Offer the cure."
-#
-# This workflow analyzes code changes (YAML, Python, JS) and posts a comment
-# with TWO distinct fixes: Option A (Performance/Minimal) and Option B (Safety/Readability).
-      # ─── ÉTAPE 1 : SEMGREP ───────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# Stratégie :
+#   - Analyse les fichiers modifiés (YAML, Python, JS).
+#   - Exécute Semgrep en mode audit de sécurité.
+#   - Génère un commentaire proposant 2 options de correction (A : Perf, B : Safe).
+#   - Poste le diagnostic directement sur la Pull Request.
+# ═══════════════════════════════════════════════════════════════════════════════
+name: "Nexus Code Healer"
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '**.yml'
+      - '**.yaml'
+      - '**.py'
+      - '**.js'
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+jobs:
+  heal:
+    name: "🩺 Analyze & Suggest"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
       - name: Run Semgrep
-        # On autorise l'échec de cette étape pour que l'upload SARIF se fasse quand même
+        id: semgrep
         continue-on-error: true
         run: |
           semgrep ci \
@@ -19,27 +41,49 @@
             --error
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-      # ─── ÉTAPE 2 : UPLOAD SARIF ──────────────────────────────────────────────
       - name: Upload SARIF
-        # On force l'exécution même si l'étape précédente a échoué (code 1 = failles trouvées)
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: semgrep.sarif
           category: semgrep
-          # NOTE: GitHub recommande de passer à v4 pour 2026, 
-          # mais v3 reste fonctionnel pour l'instant.
-          name: "Nexus Code Healer"
-          on:
-        pull_request:
-         types: [opened, synchronize]
-        paths:
-      - '**.yml'
-      - '**.yaml'
-      - '**.py'
-      - '**.js
-      Poste le commentaire sur la Pull Request
-            github.rest.issues.createComment({
+      - name: Generate & Post Comments
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let suggestions = "### 🧬 Nexus Code Healer\n\n";
+            suggestions += "L'analyse est terminée. Voici les recommandations de correction pour cette Pull Request.\n\n";
+            
+            // Vérifie si Semgrep a trouvé des erreurs
+            if (fs.existsSync('semgrep.sarif')) {
+              const sarif = JSON.parse(fs.readFileSync('semgrep.sarif', 'utf8'));
+              const results = sarif.runs[0].results || [];
+              
+              if (results.length > 0) {
+                suggestions += `#### 🚨 Vulnérabilités détectées : ${results.length}\n\n`;
+                results.forEach((res, i) => {
+                  const ruleId = res.ruleId;
+                  const message = res.message;
+                  const path = res.locations[0].physicalLocation.artifactLocation.uri;
+                  const line = res.locations[0].physicalLocation.region.startLine;
+                  
+                  suggestions += `**${i + 1}. ${ruleId}** (Fichier: \`${path}\` ligne ${line})\n`;
+                  suggestions += `> ${message}\n\n`;
+                  suggestions += `**Option A (Performance/Minimal)** : Corriger la faille en modifiant la ligne ${line} avec une approche directe.\n`;
+                  suggestions += `**Option B (Safety/Readability)** : Refactoriser le bloc de code englobant pour isoler la logique et ajouter des tests.\n\n`;
+                });
+              } else {
+                suggestions += "✅ **Aucune vulnérabilité détectée par Semgrep.** Le code est souverain.\n\n";
+              }
+            } else {
+               suggestions += "⚠️ **Rapport Semgrep introuvable.** L'analyse a peut-être échoué.\n\n";
+            }
+            
+            suggestions += "---\n*Généré par l'Architecte Systémique Senior ++ (Nexus Quantum).*";
+            
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
