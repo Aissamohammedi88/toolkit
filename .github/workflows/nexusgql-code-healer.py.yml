@@ -1,63 +1,44 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # NEXUS CODE HEALER — Self-Healing Code Agent
-# ═══════════════════════════════════════════════════════════════════════════════
-# 
+# ═══════════════════════════════════════════════════════════════════════════════ 
 # "Don't just find the bug. Offer the cure."
 #
 # This workflow analyzes code changes (YAML, Python, JS) and posts a comment
 # with TWO distinct fixes: Option A (Performance/Minimal) and Option B (Safety/Readability).
-# ═══════════════════════════════════════════════════════════════════════════════
-
-name: "Nexus Code Healer"
-
-on:
-  pull_request:
-    types: [opened, synchronize]
-    paths:
+      # ─── ÉTAPE 1 : SEMGREP ───────────────────────────────────────────────────
+      - name: Run Semgrep
+        # On autorise l'échec de cette étape pour que l'upload SARIF se fasse quand même
+        continue-on-error: true
+        run: |
+          semgrep ci \
+            --config p/secrets \
+            --config p/security-audit \
+            --config p/owasp-top-ten \
+            --sarif \
+            --output semgrep.sarif \
+            --error
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+      # ─── ÉTAPE 2 : UPLOAD SARIF ──────────────────────────────────────────────
+      - name: Upload SARIF
+        # On force l'exécution même si l'étape précédente a échoué (code 1 = failles trouvées)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+          # NOTE: GitHub recommande de passer à v4 pour 2026, 
+          # mais v3 reste fonctionnel pour l'instant.
+          name: "Nexus Code Healer"
+          on:
+        pull_request:
+         types: [opened, synchronize]
+        paths:
       - '**.yml'
       - '**.yaml'
       - '**.py'
-      - '**.js'
-      - '**.ts'
-
-permissions:
-  contents: read
-  pull-requests: write
-
-jobs:
-  heal:
-    name: "🩺 Analyze & Heal"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Dependencies
-        run: pip install requests pyyaml
-
-      - name: Run Code Healer Agent
-        id: healer
-        env:
-          # Remplace par ta clé API (ou utilise un modèle local via Ollama)
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python healer.py
-
-      - name: Post Suggestions to PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const suggestions = fs.readFileSync('suggestions.md', 'utf8');
-            
-            // Poste le commentaire sur la Pull Request
+      - '**.js
+      Poste le commentaire sur la Pull Request
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
