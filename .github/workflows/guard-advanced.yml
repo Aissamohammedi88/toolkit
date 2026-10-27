@@ -1,0 +1,40 @@
+name: "🛡️ Dependency Guard & Auto-Merge"
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  dependency-review:
+    name: "🔍 Review Dependencies"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      
+      - name: "Dependency Review (Bloque les CVE)"
+        uses: actions/dependency-review-action@a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0 # v4.5.0
+        with:
+          fail-on-severity: high
+          deny-licenses: GPL-3.0, AGPL-3.0
+
+  auto-merge:
+    name: "🤖 Auto-Merge (si sain)"
+    needs: [dependency-review]
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Fetch Dependabot Metadata"
+        id: metadata
+        uses: dependabot/fetch-metadata@b2a1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9 # v2.1.0
+
+      - name: "Auto-Merge (Patch/Minor uniquement)"
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: |
+          gh pr merge --auto --squash "${{ github.event.pull_request.html_url }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
