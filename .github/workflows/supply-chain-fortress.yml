@@ -1,18 +1,15 @@
 name: "Nexus Sovereign Audit & Auto-Heal"
-
 on:
   push:
     branches: [ main, master ]
   pull_request:
     types: [ opened, synchronize, reopened ]
   workflow_dispatch:
-
 permissions:
   contents: write
   pull-requests: write
   security-events: write
   issues: write
-
 concurrency:
   group: nexus-audit-${{ github.ref }}
   cancel-in-progress: true
@@ -121,7 +118,6 @@ jobs:
           labels: |
             auto-heal
             needs-review
-
   # ─── JOB 5 : CERTIFICAT (Toujours exécuté) ──────────────────────────────────
   sovereign-certificate:
     needs: [security-gate, build-test]
@@ -134,20 +130,15 @@ jobs:
         run: |
           SHA=$(sha256sum .github/workflows/nexus-sovereign-audit.yml | awk '{print $1}')
           echo "workflow_sha=$SHA" >> "$GITHUB_OUTPUT"
-
       - name: Écrire le certificat
         run: |
           cat > CERTIFICATE.md << EOF
           # 🛡️ Certificat Souverain — Nexus Quantum
-          
           **Commit :** \`${{ github.sha }}\`
           **Workflow SHA-256 :** \`${{ steps.hash.outputs.workflow_sha }}\`
           **Timestamp :** $(date -u +%Y-%m-%dT%H:%M:%SZ)
           **Sécurité :** ${{ needs.security-gate.result }}
-          **Build :** ${{ needs.build-test.result }}
-          
-          > Ce certificat est généré localement. Aucune donnée n'a quitté le runner.
-          EOF
-
+          **Build :** ${{ needs.build-test.result }}    
+      
       - name: Publier dans le résumé
         run: cat CERTIFICATE.md >> "$GITHUB_STEP_SUMMARY"
