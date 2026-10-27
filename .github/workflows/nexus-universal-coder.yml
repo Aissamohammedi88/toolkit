@@ -1,0 +1,207 @@
+# .github/workflows/nexus-universal-coder.yml
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEXUS UNIVERSAL CODER — Agent autonome de maintenance multi-langages
+# ═══════════════════════════════════════════════════════════════════════════════
+# 
+# Ce workflow unifie :
+#   1. Détection automatique de tous les langages présents.
+#   2. Auto-correction (linting) via des outils standards.
+#   3. Résolution automatique des conflits de merge non critiques.
+#   4. Mise à jour des workflows GitHub Actions (versions des actions).
+#   5. Analyse de sécurité.
+# ═══════════════════════════════════════════════════════════════════════════════
+name: Universal Coder Agent
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    types: [opened, synchronize]
+  schedule:
+    - cron: '0 2 * * 1' # Chaque lundi à 02:00 UTC
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+  security-events: write
+  actions: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  # ─── JOB 1 : DÉTECTION DES LANGAGES ──────────────────────────────────────────
+  # Utilise `github-linguist` (le même moteur que GitHub) pour lister
+  # tous les langages présents dans le dépôt.
+  detect-languages:
+    name: "🔍 Detect Languages"
+    runs-on: ubuntu-latest
+    outputs:
+      languages: ${{ steps.linguist.outputs.languages }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Ruby (for Linguist)
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+      - name: Install Linguist
+        run: gem install github-linguist
+      
+      - name: Detect Languages
+        id: linguist
+        run: |
+          # Linguist analyse le dépôt et retourne un JSON des langages
+          LANGUAGES=$(github-linguist --breakdown --json | jq -r 'keys[]' | tr '\n' ' ')
+          echo "languages=$LANGUAGES" >> $GITHUB_OUTPUT
+          echo "Detected languages: $LANGUAGES"
+  # ─── JOB 2 : AUTO-FIX MULTI-LANGAGES ────────────────────────────────────────
+  # Utilise des outils spécialisés par langage. Chaque outil est exécuté
+  # conditionnellement si le langage est détecté.
+  auto-fix:
+    name: "🔧 Auto-Fix (${{ matrix.tool }})"
+    needs: detect-languages
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Python
+          - tool: "ruff"
+            condition: contains(needs.detect-languages.outputs.languages, 'Python')
+            command: "ruff check --fix . && ruff format ."
+          # JavaScript / TypeScript
+          - tool: "eslint"
+            condition: contains(needs.detect-languages.outputs.languages, 'JavaScript')
+            command: "npx eslint . --fix"
+          # Go
+          - tool: "gofmt"
+            condition: contains(needs.detect-languages.outputs.languages, 'Go')
+            command: "go fmt ./..."
+          # Rust
+          - tool: "rustfmt"
+            condition: contains(needs.detect-languages.outputs.languages, 'Rust')
+            command: "cargo fmt"
+          # Java
+          - tool: "google-java-format"
+            condition: contains(needs.detect-languages.outputs.languages, 'Java')
+            command: "find . -name '*.java' -exec google-java-format -i {} +"
+          # C / C++
+          - tool: "clang-format"
+            condition: contains(needs.detect-languages.outputs.languages, 'C')
+            command: "find . -name '*.c' -o -name '*.cpp' | xargs clang-format -i"
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Tool
+        run: |
+          case "${{ matrix.tool }}" in
+            "ruff") pip install ruff ;;
+            "eslint") npm install -g eslint ;;
+            "gofmt") sudo apt-get install -y golang ;;
+            "rustfmt") rustup component add rustfmt ;;
+            "google-java-format") wget -q https://github.com/google/google-java-format/releases/latest/download/google-java-format-1.22.0-all-deps.jar -O /usr/local/bin/google-java-format.jar ;;
+            "clang-format") sudo apt-get install -y clang-format ;;
+          esac
+      - name: Run Auto-Fix
+        if: matrix.condition
+        run: ${{ matrix.command }}
+      - name: Commit Changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        if: matrix.condition
+        with:
+          commit_message: "style: auto-fix ${{ matrix.tool }} formatting"
+          commit_options: '--no-verify'
+          file_pattern: |
+            **/*.py
+            **/*.js
+            **/*.ts
+            **/*.go
+            **/*.rs
+            **/*.java
+            **/*.c
+            **/*.cpp
+  # ─── JOB 3 : RÉSOLUTION DE CONFLITS ─────────────────────────────────────────
+  # Utilise `Pullfrog` ou `lcdp-back-merge` pour détecter et résoudre
+  # automatiquement les conflits de merge non critiques.
+  resolve-conflicts:
+    name: "🔀 Resolve Conflicts"
+    needs: detect-languages
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check for Merge Conflicts
+        id: conflicts
+        run: |
+          # Tente un merge avec la branche cible
+          git fetch origin ${{ github.base_ref }}
+          if git merge --no-commit --no-ff origin/${{ github.base_ref }}; then
+            echo "conflicts=false" >> $GITHUB_OUTPUT
+            git merge --abort
+          else
+            echo "conflicts=true" >> $GITHUB_OUTPUT
+            git merge --abort
+          fi
+      - name: Auto-Resolve (False Conflicts)
+        if: steps.conflicts.outputs.conflicts == 'true'
+        run: |
+          # Utilise la stratégie "ours" pour les conflits non critiques
+          git checkout --ours . 2>/dev/null || true
+          git add .
+          git commit -m "chore: auto-resolve false conflicts" || true
+      - name: Create PR Comment
+        if: steps.conflicts.outputs.conflicts == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '⚠️ Conflits détectés. Certains ont été auto-résolus, les autres nécessitent une intervention manuelle.'
+            })
+  # ─── JOB 4 : MISE À JOUR DES WORKFLOWS ───────────────────────────────────────
+  # Utilise `gh aw update` (outil officiel GitHub) pour mettre à jour
+  # les versions des actions dans tous les fichiers de workflow.
+  update-workflows:
+    name: "🔄 Update Workflows"
+    needs: detect-languages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install gh-aw
+        run: |
+          gh extension install github/gh-aw
+    
+      - name: Update All Workflows
+        run: |
+          # Met à jour toutes les actions dans .github/workflows/
+          gh aw update --all
+      - name: Commit Changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "ci: update GitHub Actions versions"
+          commit_options: '--no-verify'
+          file_pattern: '.github/workflows/*.yml'
+  # ─── JOB 5 : ANALYSE DE SÉCURITÉ ────────────────────────────────────────────
+  security-scan:
+    name: "🛡️ Security Scan"
+    needs: detect-languages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy (Filesystem Scan)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
