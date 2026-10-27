@@ -34,7 +34,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-        languages: ${{ matrix.language }}
+    languages: ${{ matrix.language }}
         # On utilise les requêtes de sécurité étendues
         queries: security-extended,security-and-quality
       - name: Autobuild
