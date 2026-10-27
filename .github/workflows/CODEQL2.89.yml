@@ -1,7 +1,6 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # AXIOM PROTOCOL — TRUTH & SYNTAX VALIDATION 2027
 # ═══════════════════════════════════════════════════════════════════════════════
-# 
 # "Data without type is a rumor. Data with type is a truth."
 #
 # This workflow is not just a test. It's a proof of semantic integrity.
@@ -15,7 +14,7 @@ on:
   workflow_dispatch:
 # ─── YAML 1.2 ANCHORS & ALIASES ───────────────────────────────────────────────
 # We define a base configuration block once.
-_base_config: &base_config
+ base_config: &base_config
   runs-on: ubuntu-latest
   timeout-minutes: 5
   env:
@@ -63,15 +62,13 @@ jobs:
           print(f"  BUILD_ID: {type(env_vars['BUILD_ID']).__name__}")
           print(f"  IS_PRODUCTION: {type(env_vars['IS_PRODUCTION']).__name__}")
           print(f"  THRESHOLD: {type(env_vars['THRESHOLD']).__name__}")
-          EOF
-          
+          EOF         
           python validator.py
 
       - name: Generate Cryptographic Proof (2027 Standard)
         run: |
           # On hash le fichier YAML pour prouver son intégrité
           YAML_HASH=$(sha256sum .github/workflows/axiom-truth.yml | awk '{print $1}')
-          
           {
             echo "### 🧬 Axiom Truth Proof"
             echo ""
