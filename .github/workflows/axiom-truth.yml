@@ -34,27 +34,22 @@ jobs:
           import sys
           with open(".github/workflows/axiom-truth.yml", "r") as f:
               doc = yaml.safe_load(f)
-
           env_vars = doc["jobs"]["verify_axioms"]["env"]
           # Assertions de typage strict
           assert isinstance(env_vars["APP_VERSION"], str), "APP_VERSION is not a string"
           assert isinstance(env_vars["BUILD_ID"], int), "BUILD_ID is not an integer"
           assert isinstance(env_vars["IS_PRODUCTION"], bool), "IS_PRODUCTION is not a boolean"
           assert isinstance(env_vars["THRESHOLD"], float), "THRESHOLD is not a float"
-
           print("✓ All YAML 1.2 types validated successfully.")
           print(f"  APP_VERSION: {type(env_vars['APP_VERSION']).__name__}")
           print(f"  BUILD_ID: {type(env_vars['BUILD_ID']).__name__}")
           print(f"  IS_PRODUCTION: {type(env_vars['IS_PRODUCTION']).__name__}")
           print(f"  THRESHOLD: {type(env_vars['THRESHOLD']).__name__}")
           EOF
-
           python validator.py
-
       - name: Generate Cryptographic Proof (2027 Standard)
         run: |
           YAML_HASH=$(sha256sum .github/workflows/axiom-truth.yml | awk '{print $1}')
-          
           {
             echo "### 🧬 Axiom Truth Proof"
             echo ""
@@ -73,7 +68,6 @@ jobs:
             echo ""
             echo "> ✅ *The YAML parser is fully compliant with specification 1.2.*"
           } >> $GITHUB_STEP_SUMMARY
-
   # ─── JOB 2 : ADVANCED YAML 1.2 FEATURES (Alias & Merge) ─────────────────────
   advanced_syntax:
     name: "⚙️ Advanced YAML 1.2 (Multiline & Flow)"
@@ -95,7 +89,6 @@ jobs:
           Literal Block (|) keeps exactly what you see.
           Folded Block (>) merges lines into a single paragraph.
           EOF
-          
       - name: Confirm Env Alias is working
         run: |
           echo "Alias check: The APP_VERSION is $APP_VERSION and BUILD_ID is $BUILD_ID"
