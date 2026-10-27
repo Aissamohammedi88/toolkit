@@ -2,7 +2,6 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # NEXUS UNIVERSAL CODER — Agent autonome de maintenance multi-langages
 # ═══════════════════════════════════════════════════════════════════════════════
-# 
 # Ce workflow unifie :
 #   1. Détection automatique de tous les langages présents.
 #   2. Auto-correction (linting) via des outils standards.
@@ -91,7 +90,6 @@ jobs:
             command: "find . -name '*.c' -o -name '*.cpp' | xargs clang-format -i"
     steps:
       - uses: actions/checkout@v4
-      
       - name: Install Tool
         run: |
           case "${{ matrix.tool }}" in
