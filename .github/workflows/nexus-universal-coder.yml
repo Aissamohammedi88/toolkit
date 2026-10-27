@@ -1,9 +1,7 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # NEXUS UNIVERSAL CODER v2.1 — Agent Autonome Multi-Langages
 # ═══════════════════════════════════════════════════════════════════════════════
-
 name: Universal Coder Agent
-
 on:
   push:
     branches: [ "main", "master" ]
@@ -12,7 +10,6 @@ on:
   schedule:
     - cron: '0 2 * * 1'
   workflow_dispatch:
-
 # Ajout de attestations: write pour le Job 6
 permissions:
   contents: write
@@ -21,11 +18,9 @@ permissions:
   actions: read
   id-token: write        # Requis pour l'attestation OIDC
   attestations: write    # Requis pour générer le SLSA
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   # ─── JOB 1 : DÉTECTION DES LANGAGES ──────────────────────────────────────────
   detect-languages:
