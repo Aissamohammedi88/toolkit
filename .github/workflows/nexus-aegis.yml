@@ -9,25 +9,20 @@
 # 3. AI-Heal : If tests fail, it invokes an LLM to patch the code automatically.
 # 4. SLSA    : Cryptographically signs the final artifact (Zero-Trust).
 # ═══════════════════════════════════════════════════════════════════════════════
-
 name: "🛡️ Nexus Aegis Pipeline"
-
 on:
   pull_request:
     branches: [ "main", "master" ]
   push:
     branches: [ "main", "master" ]
-
 # Loi 1 : Annulation des runs obsolètes pour économiser les ressources
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 permissions:
   contents: write       # Needed for AI to commit fixes
   pull-requests: write  # Needed for AI to comment
   id-token: write       # Needed for SLSA provenance
-
 jobs:
   # ─── ÉTAPE 1 : TRIAGE PRÉDICTIF (Le Cerveau) ────────────────────────────────
   triage:
@@ -73,7 +68,7 @@ jobs:
           if [[ "$MATRIX" == "[]" ]]; then
             MATRIX='[{"package":"core", "test_cmd":"cargo test"}]'
           fi
-          
+  
           echo "matrix={\"include\":$MATRIX}" >> $GITHUB_OUTPUT
 
   # ─── ÉTAPE 2 : EXÉCUTION DYNAMIQUE ──────────────────────────────────────────
