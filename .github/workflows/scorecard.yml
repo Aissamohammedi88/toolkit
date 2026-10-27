@@ -1,8 +1,3 @@
-# .github/workflows/scorecard.yml
-# ═══════════════════════════════════════════════════════════════════════════════
-# NEXUS SCORECARD — Audit de sécurité récurrent
-# Inspiré de : OpenSSF Scorecard, PR #43078 de NousResearch/hermes-agent
-# ═══════════════════════════════════════════════════════════════════════════════
 name: OpenSSF Scorecard
 on:
   push:
