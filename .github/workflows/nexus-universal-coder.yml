@@ -6,7 +6,6 @@
 #   - La logique conditionnelle est déplacée au niveau des steps (if).
 #   - Actions épinglées par version stable.
 # ═══════════════════════════════════════════════════════════════════════════════
-
 name: Universal Coder Agent
 
 on:
@@ -17,7 +16,6 @@ on:
   schedule:
     - cron: '0 2 * * 1'
   workflow_dispatch:
-
 permissions:
   contents: write
   pull-requests: write
@@ -56,7 +54,6 @@ jobs:
           LANGUAGES=$(github-linguist --breakdown --json | jq -r 'keys[]' | tr '\n' ',')
           echo "languages=$LANGUAGES" >> $GITHUB_OUTPUT
           echo "Detected: $LANGUAGES"
-
   # ─── JOB 2 : AUTO-FIX MULTI-LANGAGES ────────────────────────────────────────
   auto-fix:
     name: "🔧 Auto-Fix"
@@ -79,13 +76,11 @@ jobs:
         run: |
           npm install -g eslint
           npx eslint . --fix || true
-
       # --- GO ---
       - name: Fix Go (gofmt)
         if: contains(needs.detect-languages.outputs.languages, 'Go')
         run: |
           go fmt ./...
-
       # --- RUST ---
       - name: Fix Rust (rustfmt)
         if: contains(needs.detect-languages.outputs.languages, 'Rust')
