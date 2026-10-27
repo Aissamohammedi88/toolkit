@@ -29,8 +29,5 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           release-type: node
-          # On peut spécifier le chemin du package si c'est un monorepo
-          # path: packages/core
           changelog-notes-type: github
-          # Configuration du style des commits
           bump-minor-pre-major: true
