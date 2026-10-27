@@ -1,27 +1,95 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
+# ═══════════════════════════════════════════════════════════════════════════════
+# DEPENDABOT CONFIGURATION — NEXUS ULTRA
+# ═══════════════════════════════════════════════════════════════════════════════
+# Stratégie :
+#   - Vérification quotidienne des dépendances NPM.
+#   - Regroupement des mises à jour mineures et patchs.
+#   - Séparation stricte des mises à jour majeures (qui cassent le code).
+#   - Assignation automatique au mainteneur (Aissamohammedi88).
+#   - Labels personnalisés pour le filtrage.
+# ═══════════════════════════════════════════════════════════════════════════════
 version: 2
 updates:
+  # ─── 1. PACKAGE : ARTIFACT ──────────────────────────────────────────────────
   - package-ecosystem: "npm"
     directory: "/packages/artifact"
     schedule:
       interval: "daily"
+      time: "03:00"
+      timezone: "America/Montreal"
+    assignees:
+      - "Aissamohammedi88"
+    labels:
+      - "dependencies"
+      - "artifact"
+      - "automated"
+    commit-message:
+      prefix: "chore(artifact):"
+      include: "scope"
+    # Regroupement des mises à jour mineures/patchs
     groups:
-      # Group minor and patch updates together but keep major separate
       artifact-minor-patch:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
         update-types:
           - "minor"
           - "patch"
+    # On ignore les mises à jour majeures pour éviter de casser le build
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  # ─── 2. PACKAGE : CACHE ─────────────────────────────────────────────────────
   - package-ecosystem: "npm"
     directory: "/packages/cache"
     schedule:
       interval: "daily"
+      time: "03:15"
+      timezone: "America/Montreal"
+    assignees:
+      - "Aissamohammedi88"
+    labels:
+      - "dependencies"
+      - "cache"
+      - "automated"
+    commit-message:
+      prefix: "chore(cache):"
+      include: "scope"
     groups:
-      # Group minor and patch updates together but keep major separate
       cache-minor-patch:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  # ─── 3. PACKAGE : CORE (si tu en as un) ─────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/packages/core"
+    schedule:
+      interval: "daily"
+    assignees:
+      - "Aissamohammedi88"
+    labels: ["dependencies", "core", "automated"]
+    commit-message:
+      prefix: "chore(core):"
+    groups:
+      core-minor-patch:
+        update-types: ["minor", "patch"]
+  # ─── 4. ACTIONS GITHUB (Sécurité de la Supply Chain) ────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    assignees:
+      - "Aissamohammedi88"
+    labels: ["dependencies", "ci-cd", "security"]
+    commit-message:
+      prefix: "ci(deps):"
+    groups:
+      actions-minor-patch:
+        update-types: ["minor", "patch"]
