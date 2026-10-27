@@ -16,7 +16,6 @@ permissions:
 concurrency:
   group: nexus-audit-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   # ─── JOB 1 : DÉTECTION DE STACK ─────────────────────────────────────────────
   detect-stack:
@@ -35,13 +34,12 @@ jobs:
           if ls *.cob *.cbl 1>/dev/null 2>&1; then LANGS+=("cobol"); fi
           if [ ${#LANGS[@]} -eq 0 ]; then LANGS=("generic"); fi
           echo "languages={\"include\":[$(printf '{"lang":"%s"},' "${LANGS[@]}" | sed 's/,$//')]}" >> "$GITHUB_OUTPUT"
-
   # ─── JOB 2 : SÉCURITÉ (Non bloquant pour l'instant) ─────────────────────────
   security-gate:
     needs: detect-stack
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix: ${{ fromJson(needs.detect-stack.outputs.languages) }}
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +96,6 @@ jobs:
           pip install -r requirements.txt || true
           python -m pytest --tb=short || true
 
-  # ─── JOB 4 : AUTO-HEAL (Sécurisé) ───────────────────────────────────────────
   auto-heal:
     needs: [detect-stack, build-test]
     if: always() && needs.build-test.result == 'failure'
