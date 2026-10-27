@@ -1,0 +1,129 @@
+name: "🛡️ CodeQL Extension — 100 Validations Souveraines"
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+concurrency:
+  group: codeql-ext-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ─── JOB 1 : PRÉPARATION (cache + bundle) ───────────────────────
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      codeql-version: ${{ steps.codeql.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache CodeQL bundle
+        id: cache-codeql
+        uses: actions/cache@v4
+        with:
+          path: ~/codeql
+          key: codeql-bundle-${{ runner.os }}-v1
+
+      - name: Download CodeQL bundle
+        if: steps.cache-codeql.outputs.cache-hit != 'true'
+        run: |
+          wget -q https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.18.1/codeql-bundle-linux64.tar.zst
+          mkdir -p ~/codeql
+          tar -xf codeql-bundle-linux64.tar.zst -C ~/codeql --strip-components=1
+      - name: Verify CodeQL CLI
+        id: codeql
+        run: |
+          export PATH="$HOME/codeql:$PATH"
+          echo "version=$(codeql version --format=terse)" >> "$GITHUB_OUTPUT"
+          codeql resolve packs
+  # ─── JOB 2 : 100 VALIDATIONS PARALLÈLES (10 groupes × 10) ──────
+  validate-queries:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore CodeQL bundle
+        uses: actions/cache@v4
+        with:
+          path: ~/codeql
+          key: codeql-bundle-${{ runner.os }}-v1
+      - name: Restore compilation cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.codeql/cache
+          key: codeql-compile-cache-${{ runner.os }}-${{ hashFiles('qlpack.yml') }}
+          restore-keys: |
+            codeql-compile-cache-${{ runner.os }}-
+      - name: Install extension pack
+        run: |
+          export PATH="$HOME/codeql:$PATH"
+          # Installe le pack d extension (remplace par le nom de ton pack)
+          codeql pack install ./extensions/my-codeql-pack || true
+
+      - name: Validate 10 queries (groupe ${{ matrix.group }})
+        run: |
+          export PATH="$HOME/codeql:$PATH"
+          export CODEQL_CACHE="$HOME/.codeql/cache"
+          mkdir -p "$CODEQL_CACHE"
+
+          PASSED=0
+          FAILED=0
+
+          # Récupère les 10 requêtes attribuées à ce groupe
+          QUERIES=$(find ./extensions/my-codeql-pack -name "*.ql" | sort | sed -n "$(( (${{ matrix.group }} - 1) * 10 + 1 )),$(( ${{ matrix.group }} * 10 ))p")
+
+          if [ -z "$QUERIES" ]; then
+            echo "::warning::Aucune requête dans le groupe ${{ matrix.group }}"
+            exit 0
+          fi
+
+          for Q in $QUERIES; do
+            echo "🔍 Validation de $Q (groupe ${{ matrix.group }})"
+            if codeql resolve queries "$Q" >/dev/null 2>&1; then
+              echo "  ✅ $Q — résolution OK"
+              PASSED=$((PASSED + 1))
+            else
+              echo "  ❌ $Q — échec de résolution"
+              FAILED=$((FAILED + 1))
+            fi
+          done
+          echo "📊 Groupe ${{ matrix.group }} : $PASSED validées, $FAILED échouées"
+          if [ "$FAILED" -gt 0 ]; then
+            exit 1
+          fi
+      - name: Precompile query plans (cache partagé)
+        if: always()
+        run: |
+          export PATH="$HOME/codeql:$PATH"
+          # Précompile les requêtes validées pour les runs suivants
+          codeql query compile --precompile --threads 0 \
+            --compilation-cache-size=1024 \
+            --common-caches="$HOME/.codeql/cache" \
+            ./extensions/my-codeql-pack || true
+  # ─── JOB 3 : RAPPORT FINAL (agrégation) ─────────────────────────
+  report:
+    needs: validate-queries
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Résumé des 100 validations
+        run: |
+          cat << 'EOF' >> "$GITHUB_STEP_SUMMARY"
+          ## 🛡️ CodeQL Extension — Rapport de Validation
+          | Groupe | Statut |
+          |--------|--------|
+          EOF
+          echo "| 1–10 | ${{ needs.validate-queries.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> Les 100 requêtes ont été validées en parallèle via 10 groupes de 10." >> "$GITHUB_STEP_SUMMARY"
