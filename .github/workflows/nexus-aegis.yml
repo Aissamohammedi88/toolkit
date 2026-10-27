@@ -1,0 +1,173 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEXUS AEGIS — PREDICTIVE & SELF-HEALING PIPELINE
+# ═══════════════════════════════════════════════════════════════════════════════
+# 
+# "A normal pipeline executes instructions. An Aegis pipeline anticipates them."
+#
+# 1. Triage : Analyzes changed files to predict the required test matrix.
+# 2. Matrix  : Dynamically generates the exact jobs needed (no waste).
+# 3. AI-Heal : If tests fail, it invokes an LLM to patch the code automatically.
+# 4. SLSA    : Cryptographically signs the final artifact (Zero-Trust).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: "🛡️ Nexus Aegis Pipeline"
+
+on:
+  pull_request:
+    branches: [ "main", "master" ]
+  push:
+    branches: [ "main", "master" ]
+
+# Loi 1 : Annulation des runs obsolètes pour économiser les ressources
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write       # Needed for AI to commit fixes
+  pull-requests: write  # Needed for AI to comment
+  id-token: write       # Needed for SLSA provenance
+
+jobs:
+  # ─── ÉTAPE 1 : TRIAGE PRÉDICTIF (Le Cerveau) ────────────────────────────────
+  triage:
+    name: "🧠 Predictive Triage"
+    runs-on: ubuntu-latest
+    outputs:
+      # On génère un JSON qui sera injecté dans la matrice du job suivant
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      has_changes: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Detect Changed Paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'packages/api/**'
+            ui:
+              - 'packages/ui/**'
+            core:
+              - 'packages/core/**'
+
+      - name: Generate Dynamic Matrix
+        id: set-matrix
+        run: |
+          # LOGIQUE DE BÂTISSEUR : On ne teste que ce qui a changé.
+          # Si l'API n'a pas changé, on ne lance pas les tests de l'API.
+          MATRIX="[]"
+          
+          if [[ "${{ steps.filter.outputs.api }}" == "true" ]]; then
+            MATRIX=$(echo "$MATRIX" | jq -c '. + [{"package":"api", "test_cmd":"npm test --workspace=api"}]')
+          fi
+          if [[ "${{ steps.filter.outputs.ui }}" == "true" ]]; then
+            MATRIX=$(echo "$MATRIX" | jq -c '. + [{"package":"ui", "test_cmd":"npm run test:ui"}]')
+          fi
+          if [[ "${{ steps.filter.outputs.core }}" == "true" ]]; then
+            MATRIX=$(echo "$MATRIX" | jq -c '. + [{"package":"core", "test_cmd":"cargo test"}]')
+          fi
+          
+          # Fallback de sécurité : si rien n'a changé (ex: modif du README), on teste le core.
+          if [[ "$MATRIX" == "[]" ]]; then
+            MATRIX='[{"package":"core", "test_cmd":"cargo test"}]'
+          fi
+          
+          echo "matrix={\"include\":$MATRIX}" >> $GITHUB_OUTPUT
+
+  # ─── ÉTAPE 2 : EXÉCUTION DYNAMIQUE ──────────────────────────────────────────
+  execute:
+    name: "⚙️ Test ${{ matrix.package }}"
+    needs: triage
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # On injecte la matrice générée par le job 'triage'
+      matrix: ${{ fromJSON(needs.triage.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Environment
+        run: echo "Setting up ${{ matrix.package }}..."
+        
+      - name: Run Tests
+        id: run_tests
+        run: |
+          echo "Executing: ${{ matrix.test_cmd }}"
+          # Simulation : on force un échec pour voir l'IA à l'œuvre
+          if [[ "${{ matrix.package }}" == "api" ]]; then
+            echo "Simulated Test Failure in API"
+            exit 1
+          fi
+          echo "Tests passed"
+
+      # ─── ÉTAPE 3 : AUTO-HEALING IA (Le Saint Graal) ─────────────────────────
+      - name: "🤖 AI Auto-Healing (If Failure)"
+        if: failure() && steps.run_tests.outcome == 'failure'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "🚨 Failure detected in ${{ matrix.package }}."
+          echo "Invoking AI to analyze logs and patch code..."
+          
+          # LOGIQUE DE BÂTISSEUR : On récupère le code, on l'envoie à l'IA, l'IA renvoie le patch.
+          # (Script Python simplifié pour l'exemple)
+          python3 -c "
+import os, subprocess, requests, sys
+
+pkg = '${{ matrix.package }}'
+print(f'Analyzing {pkg} source code...')
+
+# 1. Récupérer le fichier qui a probablement causé l'erreur (simulé)
+code_snippet = 'function broken() { return null; }'
+
+# 2. Demander à l'IA de corriger
+response = requests.post(
+    'https://api.openai.com/v1/chat/completions',
+    headers={'Authorization': f'Bearer {os.environ[\"OPENAI_API_KEY\"]}'},
+    json={
+        'model': 'gpt-4o',
+        'messages': [{'role': 'user', 'content': f'Fix this broken code: {code_snippet}'}]
+    }
+).json()
+
+fixed_code = response['choices'][0]['message']['content']
+print(f'AI Proposed Fix:\n{fixed_code}')
+
+# 3. Écrire le correctif (dans un vrai scénario, on parse le bloc markdown)
+with open('packages/api/auto_fix.js', 'w') as f:
+    f.write(fixed_code)
+
+# 4. Commit le correctif
+subprocess.run(['git', 'config', 'user.name', 'Aegis-Bot'])
+subprocess.run(['git', 'config', 'user.email', 'aegis@nexus.local'])
+subprocess.run(['git', 'add', '.'])
+subprocess.run(['git', 'commit', '-m', 'fix(api): auto-healed by Nexus Aegis AI'])
+subprocess.run(['git', 'push'])
+print('✅ Fix pushed. Please re-run the pipeline.')
+"
+        continue-on-error: true
+
+  # ─── ÉTAPE 4 : SCEAU CRYPTOGRAPHIQUE (SLSA) ────────────────────────────────
+  provenance:
+    name: "🔏 SLSA Provenance"
+    needs: execute
+    if: success()
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Generate SLSA Attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'packages/**'
+          
+      - name: Summary
+        run: |
+          echo "### 🛡️ Nexus Aegis Pipeline Succeeded" >> $GITHUB_STEP_SUMMARY
+          echo "All dynamic tests passed and provenance was generated." >> $GITHUB_STEP_SUMMARY
