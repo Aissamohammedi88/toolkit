@@ -1,0 +1,63 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# DYNAMIC MATRIX — NEXUS ULTRA
+# ═══════════════════════════════════════════════════════════════════════════════
+# Stratégie :
+#   - Détection des packages modifiés via git diff.
+#   - Génération d une matrice JSON dynamique (fromJSON).
+#   - Exécution parallèle uniquement sur les packages concernés.
+#   - Cache npm partagé par package.
+#   - Timeout court (10 min) pour éviter les runs fantômes.
+# ═══════════════════════════════════════════════════════════════════════════════
+name: "🧬 Dynamic Matrix"
+on:
+  pull_request:
+    branches: [main, master]
+permissions:
+  contents: read
+concurrency:
+  group: "dynamic-matrix-${{ github.ref }}"
+  cancel-in-progress: true
+jobs:
+  detect:
+    name: "🔍 Detect Changed Packages"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: set
+        name: "Build Matrix JSON"
+        shell: bash
+        run: |
+          CHANGED=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -E '^packages/[^/]+/' | cut -d/ -f2 | sort -u || true)
+          if [ -z "$CHANGED" ]; then
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          JSON=$(printf '%s\n' "$CHANGED" | jq -R -s -c 'split("\n") | map(select(length>0)) | {include: map({package: .})}')
+          echo "matrix=$JSON" >> "$GITHUB_OUTPUT"
+  build:
+    name: "📦 Build ${{ matrix.package }}"
+    needs: detect
+    if: needs.detect.outputs.matrix != '{"include":[]}'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'packages/${{ matrix.package }}/package-lock.json'
+      - name: "Install & Build"
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          npm ci
+          npm run build --if-present
+          npm test --if-present
