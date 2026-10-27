@@ -9,7 +9,6 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 name: " Greetings Protocol"
 on:
-
   issues:
     types: [opened]
   pull_request_target:
@@ -19,9 +18,7 @@ permissions:
   pull-requests: write
 jobs:
   greeting:
-    name: "
-		
-		
+    name: "	
 		First Interaction"
     runs-on: ubuntu-latest
     steps:
