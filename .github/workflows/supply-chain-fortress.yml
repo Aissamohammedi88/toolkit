@@ -1,0 +1,195 @@
+name: "🏰 Supply Chain Fortress"
+
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write # CRUCIAL : pour OIDC (Cosign keyless + SLSA)
+  security-events: write
+  pull-requests: write
+
+concurrency:
+  group: "fortress-${{ github.ref }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════
+  # JOB 1 : DÉTECTION DYNAMIQUE DES COMPOSANTS MODIFIÉS
+  # ═══════════════════════════════════════════════════════════════
+  detect:
+    name: "🔍 Detect Changed Components"
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: set
+        name: "Build Matrix JSON"
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -E '^(apps|packages|services)/[^/]+/' | cut -d/ -f2 | sort -u || true)
+          else
+            CHANGED=$(git diff --name-only HEAD~1 | grep -E '^(apps|packages|services)/[^/]+/' | cut -d/ -f2 | sort -u || true)
+          fi
+          
+          if [ -z "$CHANGED" ]; then
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+          else
+            JSON=$(printf '%s\n' "$CHANGED" | jq -R -s -c 'split("\n") | map(select(length>0)) | {include: map({component: .})}')
+            echo "matrix=$JSON" >> "$GITHUB_OUTPUT"
+          fi
+  # ═══════════════════════════════════════════════════════════════
+  # JOB 2 : BUILD + SBOM + SCAN + SIGN + ATTEST (par composant)
+  # ═══════════════════════════════════════════════════════════════
+  fortress:
+    name: "🛡️ Fortress (${{ matrix.component }})"
+    needs: detect
+    if: needs.detect.outputs.matrix != '{"include":[]}'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # ─── BUILD ───
+      - name: "Build Docker Image"
+        run: |
+          docker build -t ${{ github.repository }}/${{ matrix.component }}:${{ github.sha }} \
+            ./apps/${{ matrix.component }} || \
+          docker build -t ${{ github.repository }}/${{ matrix.component }}:${{ github.sha }} \
+            ./packages/${{ matrix.component }} || \
+          docker build -t ${{ github.repository }}/${{ matrix.component }}:${{ github.sha }} \
+            ./services/${{ matrix.component }}
+
+      # ─── SBOM avec Syft ───
+      - name: "Generate SBOM (Syft)"
+        uses: anchore/sbom-action@v0.24
+        with:
+          image: ${{ github.repository }}/${{ matrix.component }}:${{ github.sha }}
+          format: cyclonedx-json
+          output-file: sbom-${{ matrix.component }}.cdx.json
+          upload-artifact: false
+
+      # ─── SCAN de vulnérabilités avec Grype ───
+      - name: "Scan SBOM for CVEs (Grype)"
+        uses: anchore/scan-action@v4
+        with:
+          sbom: sbom-${{ matrix.component }}.cdx.json
+          fail-build: true
+          severity-cutoff: high
+          output-format: sarif
+
+      - name: "Upload Grype SARIF"
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif
+          category: grype-${{ matrix.component }}
+      # ─── SCAN de vulnérabilités avec Trivy (redondance) ───
+      - name: "Scan Image with Trivy"
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: ${{ github.repository }}/${{ matrix.component }}:${{ github.sha }}
+          format: sarif
+          output: trivy-${{ matrix.component }}.sarif
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+      - name: "Upload Trivy SARIF"
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-${{ matrix.component }}.sarif
+          category: trivy-${{ matrix.component }}
+      # ─── SIGNATURE avec Cosign (keyless OIDC) ───
+      - name: "Install Cosign"
+        uses: sigstore/cosign-installer@v4
+
+      - name: "Sign Image (Cosign Keyless)"
+        run: |
+          cosign sign --yes \
+            ${{ github.repository }}/${{ matrix.component }}@${{ github.sha }}
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+      - name: "Generate SLSA Provenance"
+         with:
+          image: ${{ github.repository }}/${{ matrix.component }}
+          digest: ${{ github.sha }}
+          registry-username: ${{ github.actor }}
+          secrets:
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+      # ─── ATTESTATION de build ───
+      - name: "Attest Build Provenance"
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ github.repository }}/${{ matrix.component }}
+          subject-digest: sha256:${{ github.sha }}
+  # ═══════════════════════════════════════════════════════════════
+  # JOB 3 : DEPLOY (Blue-Green) avec ROLLBACK
+  # ═══════════════════════════════════════════════════════════════
+  deploy:
+    name: "🚀 Blue-Green Deploy"
+    needs: fortress
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Deploy Green"
+        run: |
+          echo "Deploying to GREEN environment"
+          # kubectl set image deployment/app-green app=${{ github.repository }}:${{ github.sha }}
+          # kubectl rollout status deployment/app-green --timeout=120s
+
+      - name: "Smoke Test Green"
+        run: |
+          echo "Running smoke tests on GREEN"
+          # curl -f http://green.internal/health || exit 1
+
+      - name: "Switch Traffic to Green"
+        run: |
+          echo "Switching traffic from BLUE to GREEN"
+          # kubectl patch service app -p '{"spec":{"selector":{"version":"green"}}}'
+
+      - name: "Rollback (si échec)"
+        if: failure()
+        run: |
+          echo "ROLLBACK: Switching traffic back to BLUE"
+          # kubectl patch service app -p '{"spec":{"selector":{"version":"blue"}}}'
+  verify:
+    name: "🔐 Verify All Signatures"
+    needs: fortress
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Install Cosign"
+        uses: sigstore/cosign-installer@v4
+
+      - name: "Verify Image Signature"
+        run: |
+          cosign verify \
+            --certificate-identity-regexp='https://github.com/${{ github.repository }}/.*' \
+            --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+            ${{ github.repository }}/${{ matrix.component }}@${{ github.sha }}
+
+      - name: "Verify SLSA Provenance"
+        run: |
+          cosign verify-attestation \
+            --type slsaprovenance \
+            --certificate-identity-regexp='https://github.com/${{ github.repository }}/.*' \
+            --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+            ${{ github.repository }}/${{ matrix.component }}@${{ github.sha }}
