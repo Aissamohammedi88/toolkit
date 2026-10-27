@@ -1,0 +1,39 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# GREETINGS PROTOCOL — NEXUS ULTRA
+# ═══════════════════════════════════════════════════════════════════════════════
+# Stratégie :
+#   - Détection de la première Issue ou Pull Request d'un contributeur.
+#   - Message d'accueil personnalisé avec les règles de souveraineté.
+#   - Assignation automatique au mainteneur.
+#   - Label automatique pour identifier les nouveaux arrivants.
+# ═══════════════════════════════════════════════════════════════════════════════
+name: "🤝 Greetings Protocol"
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+permissions:
+  issues: write
+  pull-requests: write
+jobs:
+  greeting:
+    name: "👋 First Interaction"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Welcome First-Timer
+        uses: actions/first-interaction@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-message: |
+            👋 Bienvenue dans l'écosystème **Nexus Quantum**, bâtisseur !
+            Ce dépôt applique le protocole de souveraineté. Avant de contribuer, assure-toi de respecter le manifeste :
+            - Zéro télémétrie.
+            - Code auditable et testé.
+            - Pas de secrets en clair.
+            Ton issue a été assignée à l'architecte `@Aissamohammedi88`. Prépare tes arguments.
+          pr-message: |
+            🛡️ **Pull Request reçue.**
+            Analyse en cours par le superviseur Polinascience (Intégrité, Cohérence, Qualité, Sécurité).
+            Ton code sera compilé et testé en local-first.
+            Si le score est < 60/100, la PR sera rejetée sans sommation. Fais de ton mieux, pas de ton minimum.
