@@ -26,7 +26,6 @@ permissions:
   security-events: write
   id-token: write
   issues: write
-
 concurrency:
   group: nexus-audit-${{ github.ref }}
   cancel-in-progress: false
@@ -72,7 +71,6 @@ jobs:
       matrix: ${{ fromJson(needs.detect-stack.outputs.languages) }}
     steps:
       - uses: actions/checkout@v4
-
       - name: Audit dépendances (Trivy FS)
         uses: aquasecurity/trivy-action@0.32.0
         with:
@@ -99,7 +97,6 @@ jobs:
       matrix: ${{ fromJson(needs.detect-stack.outputs.languages) }}
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Python
         if: matrix.lang == 'python'
         uses: actions/setup-python@v5
@@ -133,7 +130,6 @@ jobs:
       - name: Setup COBOL
         if: matrix.lang == 'cobol'
         run: sudo apt-get update && sudo apt-get install -y gnucobol
-
       - name: Compile COBOL
         if: matrix.lang == 'cobol'
         run: |
