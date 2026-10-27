@@ -1,28 +1,23 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# AXIOM PROTOCOL — TRUTH & SYNTAX VALIDATION 2027 (CORRIGÉ)
+# ═══════════════════════════════════════════════════════════════════════════════
 name: "Truth Proof 2027"
 on:
   push:
     branches: [ "main", "master" ]
   workflow_dispatch:
-# ─── YAML 1.2 ANCHORS & ALIASES ───────────────────────────────────────────────
-# We define a base configuration block once.
- base_config: &base_config
-  runs-on: ubuntu-latest
-  timeout-minutes: 5
-  env:
-    # Force strict string type to prevent version floating (e.g., 1.0 becoming 1.0.0)
-    APP_VERSION: !!str "1.0"
-    # Force integer type (no string parsing)
-    BUILD_ID: !!int 42
-    # Force boolean type
-    IS_PRODUCTION: !!bool true
-    # Force float type
-    THRESHOLD: !!float 3.14159
 jobs:
   # ─── JOB 1 : SYNTAX & SEMANTIC PROOF ────────────────────────────────────────
   verify_axioms:
-    # Merge the base config using the << Merge Key
-    <<: *base_config
     name: "🔬 Semantic Type Validation"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # On définit l'ancre ici, au niveau du job (valide)
+    env: &base_env
+      APP_VERSION: "1.0"     # String
+      BUILD_ID: 42           # Integer
+      IS_PRODUCTION: true    # Boolean
+      THRESHOLD: 3.14159     # Floa
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -32,41 +27,44 @@ jobs:
           python-version: '3.12'
       - name: Verify YAML 1.2 Types via Python
         run: |
-          # On installe le parser PyYAML (conforme 1.2)
           pip install pyyaml
-          
-          # On écrit un script qui lit le fichier YAML et vérifie les types
+          # Le script lit le fichier et vérifie les types résolus par le parseur
           cat << 'EOF' > validator.py
           import yaml
           import sys
           with open(".github/workflows/axiom-truth.yml", "r") as f:
               doc = yaml.safe_load(f)
+
           env_vars = doc["jobs"]["verify_axioms"]["env"]
           # Assertions de typage strict
           assert isinstance(env_vars["APP_VERSION"], str), "APP_VERSION is not a string"
           assert isinstance(env_vars["BUILD_ID"], int), "BUILD_ID is not an integer"
           assert isinstance(env_vars["IS_PRODUCTION"], bool), "IS_PRODUCTION is not a boolean"
           assert isinstance(env_vars["THRESHOLD"], float), "THRESHOLD is not a float"
+
           print("✓ All YAML 1.2 types validated successfully.")
           print(f"  APP_VERSION: {type(env_vars['APP_VERSION']).__name__}")
           print(f"  BUILD_ID: {type(env_vars['BUILD_ID']).__name__}")
           print(f"  IS_PRODUCTION: {type(env_vars['IS_PRODUCTION']).__name__}")
           print(f"  THRESHOLD: {type(env_vars['THRESHOLD']).__name__}")
-          EOF         
+          EOF
+
           python validator.py
-          name: Generate Cryptographic Proof (2026 Standard)
-           run: |
-          # On hash le fichier YAML pour prouver son intégrité
+
+      - name: Generate Cryptographic Proof (2027 Standard)
+        run: |
           YAML_HASH=$(sha256sum .github/workflows/axiom-truth.yml | awk '{print $1}')
+          
           {
             echo "### 🧬 Axiom Truth Proof"
             echo ""
             echo "| Axiom | Value | Verified Type |"
             echo "|-------|-------|---------------|"
-            echo "| APP_VERSION | \`${{ env.APP_VERSION }}\` | \`String\` |"
-            echo "| BUILD_ID | \`${{ env.BUILD_ID }}\` | \`Integer\` |"
-            echo "| IS_PRODUCTION | \`${{ env.IS_PRODUCTION }}\` | \`Boolean\` |"
-            echo "| THRESHOLD | \`${{ env.THRESHOLD }}\` | \`Float\` |"
+            # Utilisation des variables d'environnement (bash) et non du contexte Github
+            echo "| APP_VERSION | \`$APP_VERSION\` | \`String\` |"
+            echo "| BUILD_ID | \`$BUILD_ID\` | \`Integer\` |"
+            echo "| IS_PRODUCTION | \`$IS_PRODUCTION\` | \`Boolean\` |"
+            echo "| THRESHOLD | \`$THRESHOLD\` | \`Float\` |"
             echo ""
             echo "**Cryptographic Integrity (SHA256):**"
             echo "\`\`\`text"
@@ -74,12 +72,16 @@ jobs:
             echo "\`\`\`"
             echo ""
             echo "> ✅ *The YAML parser is fully compliant with specification 1.2.*"
-           } >> $GITHUB_STEP_SUMMARY
-  # ─── JOB 2 : ADVANCED YAML 1.2 FEATURES ─────────────────────────────────────
+          } >> $GITHUB_STEP_SUMMARY
+
+  # ─── JOB 2 : ADVANCED YAML 1.2 FEATURES (Alias & Merge) ─────────────────────
   advanced_syntax:
-    <<: *base_config
     name: "⚙️ Advanced YAML 1.2 (Multiline & Flow)"
     needs: verify_axioms
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # On réutilise l'ancre créée dans le Job 1 (Alias)
+    env: *base_env
     steps:
       - name: Test Flow Style (JSON-compatible YAML)
         run: |
@@ -88,8 +90,12 @@ jobs:
           echo "Flow config: $FLOW_CONFIG"
       - name: Test Multiline Strings
         run: |
-          # Le pipe (|) préserve les sauts de ligne. Le > les replie.
+          # Le pipe (|) préserve les sauts de ligne exacts.
           cat << 'EOF'
           Literal Block (|) keeps exactly what you see.
           Folded Block (>) merges lines into a single paragraph.
           EOF
+          
+      - name: Confirm Env Alias is working
+        run: |
+          echo "Alias check: The APP_VERSION is $APP_VERSION and BUILD_ID is $BUILD_ID"
