@@ -1,5 +1,3 @@
-
-
 name: Nexus Enterprise Guardian
 
 on:
@@ -20,12 +18,10 @@ on:
         required: false
         type: boolean
         default: true
-
 permissions:
   contents: read
   security-events: write
   id-token: write
-
 jobs:
   # ─── JOB 1 : DÉTECTION DE SECRETS (Gitleaks + TruffleHog) ───────────────────
   secret-scan:
