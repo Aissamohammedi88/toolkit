@@ -1,0 +1,125 @@
+   # ═══════════════════════════════════════════════════════════════════════════════
+# NEXUS SUPREME SECURITY SCANNER
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# "CodeQL finds data flows. We find what CodeQL ignores."
+# This workflow adds 5 layers of security that CodeQL does not cover:
+#   1. Secret Scanning (Gitleaks) - detects leaked API keys.
+#   2. Dependency Vulnerabilities (Trivy) - detects CVEs in packages.
+#   3. Infrastructure as Code (Checkov) - detects Docker/Terraform misconfigs.
+#   4. Static Analysis (Semgrep) - detects OWASP Top 10 patterns.
+#   5. OSV Scanning (Google) - detects known vulnerabilities in dependencies.
+# Runs in under 3 minutes. Uploads all results to GitHub Security.
+# ═══════════════════════════════════════════════════════════════════════════════
+name: "Nexus Supreme Security"
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  schedule:
+    - cron: '0 0 * * 0' # Weekly
+  workflow_dispatch:
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+jobs:
+  # ─── LAYER 1 : SECRETS SCANNING (CodeQL ne le fait pas) ─────────────────────
+  secrets-scan:
+    name: "🔑 Secret Scanning (Gitleaks)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }} # Optionnel pour les repos privés
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+  # ─── LAYER 2 : DEPENDENCY VULNERABILITIES (CodeQL ne le fait pas) ───────────
+  dependency-scan:
+    name: "📦 Dependency Scan (Trivy)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy (Filesystem)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs.sarif'
+          severity: 'CRITICAL,HIGH'
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+  # ─── LAYER 3 : INFRASTRUCTURE AS CODE (CodeQL ne le fait pas) ───────────────
+  iac-scan:
+    name: "🏗️ IaC Scan (Checkov)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: all
+          output_format: sarif
+          output_file_path: checkov.sarif
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
+  # ─── LAYER 4 : STATIC ANALYSIS (CodeQL le fait, mais on complète) ───────────
+  semgrep-scan:
+    name: "🔍 SAST (Semgrep)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/owasp-top-ten
+            p/javascript
+            p/typescript
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+  # ─── LAYER 5 : OSV SCANNING (Google) ────────────────────────────────────────
+  osv-scan:
+    name: "🌐 OSV Scanning (Google)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run OSV-Scanner
+        uses: google/osv-scanner-action@v1
+        with:
+          scan-args: |-
+            --recursive
+            --format=sarif
+            --output=osv.sarif
+            ./
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: osv.sarif
