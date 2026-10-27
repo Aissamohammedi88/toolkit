@@ -1,5 +1,4 @@
 name: "🧬 Builder's Mark — 1000 Validations"
-
 on:
   workflow_dispatch:
     inputs:
@@ -25,35 +24,28 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Execute 1000 Sovereign Validations
         run: |
           python - << 'PYTHON_EOF'
           import hashlib, datetime
           from pathlib import Path
-
           def generate_merkle_root(hashes):
               while len(hashes) > 1:
                   if len(hashes) % 2 != 0:
                       hashes.append(hashes[-1])
                   hashes = [hashlib.sha256((hashes[i] + hashes[i+1]).encode()).hexdigest() for i in range(0, len(hashes), 2)]
               return hashes[0] if hashes else ""
-
           repo_hash = hashlib.sha256(str(Path.cwd()).encode()).hexdigest()
           categories = ["SECURITY", "SYNTAX", "STRUCTURE", "DEPENDENCY", "INTEGRITY", 
                         "PERFORMANCE", "SOVEREIGNTY", "COMPLIANCE", "ENCRYPTION", "AUDIT"]
-          
           validations = []
           for i in range(1, 1001):
               cat = categories[i % 10]
               proof_data = f"{repo_hash}-{cat}-VALIDATION-{i:04d}"
               validations.append(hashlib.sha256(proof_data.encode()).hexdigest())
-
           root = generate_merkle_root(validations)
           ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
-
           report = f"""# 🛡️ SCEAU DU BÂTISSEUR (BUILDER'S MARK)
-
           **Architecte** : Aissa Mohammedi (DGK) — Nexus Quantum  
           **Date UTC** : `{ts}`  
           **Validations Exécutées** : `{len(validations)} / 1000`  
