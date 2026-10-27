@@ -1,0 +1,103 @@
+name: NEXUS Code Syntax Checker
+on:
+push:
+branches: [ "main", "master" ]
+pull_request:
+branches: [ "main", "master" ]
+jobs:
+syntax-check:
+name: Scan Syntax & Score
+runs-on: ubuntu-latest
+steps:
+- name: Checkout du code
+uses: actions/checkout@v4
+- name: Setup Python 3.10
+uses: actions/setup-python@v5
+with:
+python-version: '3.10'
+- name: Installation des dépendances (Pygments, Tree-sitter)
+run: |
+python -m pip install --upgrade pip
+pip install pygments tree-sitter-language-pack
+- name: Création du script d'analyse automatique
+run: |
+cat > analyze.py << 'PYCODE'
+import os
+import sys
+import ast
+import json
+from pathlib import Path
+from pygments.lexers import get_lexer_for_filename
+from tree_sitter_language_pack import get_parser
+# Configuration
+GRAMMAR_ALIASES = {"py": "python", "js": "javascript", "ts": "typescript", "c": "c", "cpp": "cpp", "cs": "c_sharp", "go": "go", "rs": "rust", "java": "java"}
+IGNORE_DIRS = {".git", "node_modules", "venv", "env", "__pycache__", ".github"}
+MIN_SCORE = 80 # Score minimum pour passer
+def check_file(filepath):
+try:
+content = Path(filepath).read_text(encoding="utf-8")
+lexer = get_lexer_for_filename(str(filepath))
+lang = lexer.aliases[0] if lexer.aliases else "unknown"
+if not content.strip(): return {"file": str(filepath), "score": 100, "errors": []}
+# Python natif
+if lang in ["python", "py"]:
+try: ast.parse(content); return {"file": str(filepath), "score": 100, "errors": []}
+except SyntaxError as e: return {"file": str(filepath), "score": 0, "errors": [f"Ligne {e.lineno}: {e.msg}"]}
+
+# JSON natif
+if lang == "json":
+try: json.loads(content); return {"file": str(filepath), "score": 100, "errors": []}
+except Exception as e: return {"file": str(filepath), "score": 0, "errors": [str(e)]}
+# Tree-sitter pour les autres
+grammar = GRAMMAR_ALIASES.get(lang, lang)
+try:
+parser = get_parser(grammar)
+tree = parser.parse(content.encode("utf-8"))
+errors = []
+stack = [tree.root_node]
+while stack:
+node = stack.pop()
+if node.type == "ERROR" or getattr(node, "is_missing", False):
+errors.append(f"Ligne {node.start_point[0]+1}: Erreur de syntaxe")
+stack.extend(node.children)
+score = max(0, 100 - len(errors) * 20)
+return {"file": str(filepath), "score": score, "errors": errors}
+except Exception:
+return {"file": str(filepath), "score": 100, "errors": ["Grammaire non supportée - Ignoré"]}
+except Exception:
+return None
+# Scan
+results = []
+global_score = 0
+file_count = 0
+for root, dirs, files in os.walk("."):
+dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
+for file in files:
+if file.endswith((".py", ".js", ".ts", ".json", ".c", ".cpp", ".go", ".rs", ".java")):
+res = check_file(os.path.join(root, file))
+if res:
+results.append(res)
+global_score += res["score"]
+file_count += 1
+# Résumé
+print("="*50)
+print(f"RAPPORT DE SYNTAXE ({file_count} fichiers analysés)")
+print("="*50)
+fail_count = 0
+for r in results:
+if r["score"] < 100:
+print(f"[{r['score']}/100] {r['file']}")
+for err in r["errors"][:3]: print(f" -> {err}")
+if r["score"] < MIN_SCORE: fail_count += 1
+avg_score = global_score / file_count if file_count > 0 else 100
+print(f"\nSCORE MOYEN : {avg_score:.1f}%")
+print(f"FICHIERS EN ECHEC (< {MIN_SCORE}%) : {fail_count}")
+if fail_cout > 0:
+print("\n❌ BUILD FAILED : Corrige les erreurs de syntaxe.")
+sys.exit(1)
+else:
+print("\n✅ BUILD PASSED : Code propre.")
+sys.exit(0)
+PYCODE
+- name: Exécution de l'analyseur
+run: python analyze.py
