@@ -65,7 +65,7 @@ jobs:
           EOF         
           python validator.py
 
-      - name: Generate Cryptographic Proof (2027 Standard)
+        -name: Generate Cryptographic Proof (2027 Standard)
         run: |
           # On hash le fichier YAML pour prouver son intégrité
           YAML_HASH=$(sha256sum .github/workflows/axiom-truth.yml | awk '{print $1}')
