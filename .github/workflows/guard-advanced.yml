@@ -120,7 +120,6 @@ jobs:
           npm ci
           npm run build --if-present
           npm test --if-present
-
   # ─── JOB 3 : AUTO-MERGE (Dependabot uniquement) ─────────────────────────────
   auto-merge:
     name: "🤖 Auto-Merge (si sain)"
