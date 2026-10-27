@@ -1,7 +1,6 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # CODEQL SUPREME — Security Scan Beyond GitHub
 # ═══════════════════════════════════════════════════════════════════════════════
-# 
 # "CodeQL finds bugs. Supreme finds the leaks, the poisoned dependencies, 
 #  and the forbidden patterns."
 # Layer 1 : CodeQL (Static Analysis)
@@ -35,9 +34,9 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: ${{ matrix.language }}
-          # On utilise les requêtes de sécurité étendues
-          queries: security-extended,security-and-quality
+        languages: ${{ matrix.language }}
+        # On utilise les requêtes de sécurité étendues
+        queries: security-extended,security-and-quality
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
       - name: Perform CodeQL Analysis
@@ -65,7 +64,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Run Semgrep
         uses: returntocorp/semgrep-action@v1
         with:
