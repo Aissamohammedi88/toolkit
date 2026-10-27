@@ -1,64 +1,16 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-# DEPENDENCY GUARD & AUTO-MERGE — NEXUS ULTRA
-# ═══════════════════════════════════════════════════════════════════════════════
-# Stratégie :
-#   - Pinning strict par SHA (Supply Chain Security).
-#   - Auto-merge différé (attend que les CI passent).
-#   - Limitation des privilèges (sans PAT).
-# ═══════════════════════════════════════════════════════════════════════════════
-name: "🛡️ Dependency Guard & Auto-Merge"
-on:
-  pull_request:
-    branches: [ "main" ]
-    types: [ opened, synchronize, reopened, ready_for_review ]
-permissions:
-  contents: read
-  pull-requests: write
-jobs:
-  dependency-review:
-    name: "🔍 Review Dependencies"
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      # SHA v4.1.7
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
-      # SHA v4.0.0
-      - name: "Dependency Review (Bloque les CVE)"
-        uses: actions/dependency-review-action@5a2a0e7e44d0a5b1a6f6e1d3c1d4e5f6a7b8c9d0
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          fail-on-severity: high
-          deny-licenses: GPL-3.0, AGPL-3.0
-          comment-summary-in-pr: true
-  auto-merge:
-    name: "🤖 Auto-Merge (sans token externe)"
-    needs: [dependency-review]
-    if: github.actor == 'dependabot[bot]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      # SHA v2.1.0
-      - name: "Fetch Dependabot Metadata"
-        id: metadata
-        uses: dependabot/fetch-metadata@c9c4a7e7f6d1e2c3b4a5f6e7d8c9b0a1f2e3d4c5
-        with:
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          python-version: '3.12'
+          cache: 'pip'
+          # REMPLACE 'backend/' par le vrai dossier où se trouve ton requirements.txt
+          # Si tu n'en as pas, met juste 'requirements.txt' (et crée le fichier)
+          cache-dependency-path: 'requirements.txt'
           
-      - name: "Tag PR as Dependency"
-        if: steps.metadata.outputs.update-type != ''
-        run: gh pr edit "${{ github.event.pull_request.html_url }}" --add-label "dependencies"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: "Auto-Merge (Patch/Minor)"
-        if: |
-          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+      - name: Install dependencies
         run: |
-          # --auto : Attend que tous les checks CI soient terminés et verts
-          # --squash : Historique de commit propre
-          gh pr merge --auto --squash "${{ github.event.pull_request.html_url }}"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
