@@ -1,0 +1,102 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# CODEQL SUPREME — Security Scan Beyond GitHub
+# ═══════════════════════════════════════════════════════════════════════════════
+# 
+# "CodeQL finds bugs. Supreme finds the leaks, the poisoned dependencies, 
+#  and the forbidden patterns."
+# Layer 1 : CodeQL (Static Analysis)
+# Layer 2 : Gitleaks (Secrets Detection)
+# Layer 3 : Semgrep (Custom Rules & Business Logic)
+# ═══════════════════════════════════════════════════════════════════════════════
+name: CodeQL Supreme
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  schedule:
+    - cron: '0 0 * * 0' # Chaque dimanche à minuit
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+jobs:
+  # ─── LAYER 1 : CODEQL (Analyse Statique Native) ─────────────────────────────
+  codeql-analysis:
+    name: "🛡️ CodeQL Analysis"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'javascript-typescript', 'python' ] # Adapte selon tes langages
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # On utilise les requêtes de sécurité étendues
+          queries: security-extended,security-and-quality
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+  # ─── LAYER 2 : GITLEAKS (Détection de Secrets) ──────────────────────────────
+  secret-scanning:
+    name: "🔍 Secret Scanning (Gitleaks)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Nécessaire pour scanner tout l'historique Git
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Gitleaks va scanner chaque commit pour trouver des clés AWS, tokens GitHub, etc.
+  # ─── LAYER 3 : SEMGREP (Règles Métier & Code Personnalisé) ──────────────────
+  custom-rules:
+    name: "⚙️ Custom Rules (Semgrep)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          # On active les règles de sécurité OWASP et les règles personnalisées
+          config: >-
+            p/security-audit
+            p/owasp-top-ten
+        env:
+          # Token optionnel pour publier les résultats dans Semgrep App
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+  # ─── LAYER 4 : RAPPORT FINAL (Visibilité) ───────────────────────────────────
+  security-summary:
+    name: "📊 Security Summary"
+    needs: [codeql-analysis, secret-scanning, custom-rules]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Summary
+        run: |
+          {
+            echo "### 🛡️ Security Audit Summary"
+            echo ""
+            echo "| Layer | Tool | Status |"
+            echo "|-------|------|--------|"
+            echo "| Static Analysis | CodeQL | ${{ needs.codeql-analysis.result }} |"
+            echo "| Secrets Detection | Gitleaks | ${{ needs.secret-scanning.result }} |"
+            echo "| Custom Rules | Semgrep | ${{ needs.custom-rules.result }} |"
+            echo ""
+            if [[ "${{ needs.codeql-analysis.result }}" == "failure" || "${{ needs.secret-scanning.result }}" == "failure" ]]; then
+              echo "> ⚠️ **Action Required:** Security issues detected. Check the Security tab."
+            else
+              echo "> ✅ **All security checks passed.**"
+            fi
+          } >> $GITHUB_STEP_SUMMARY
