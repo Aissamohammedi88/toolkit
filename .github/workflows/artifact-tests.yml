@@ -47,7 +47,7 @@ jobs:
         echo -n 'hello from file 2' > artifact-path/second.txt
 
     - name: Upload Artifacts
-      uses: actions/github-script@v8
+      uses: actions/github-script@v9
       with:
         script: |
           const {default: artifact} = require('./packages/artifact/lib/artifact')
@@ -105,7 +105,7 @@ jobs:
         echo -n 'hello from single file upload' > single-file-${{ matrix.runs-on }}.txt
 
     - name: Upload Single File Artifact (skipArchive)
-      uses: actions/github-script@v8
+      uses: actions/github-script@v9
       with:
         script: |
           const {default: artifact} = require('./packages/artifact/lib/artifact')
@@ -189,7 +189,7 @@ jobs:
         EOF
 
     - name: Upload HTML Artifact (skipArchive)
-      uses: actions/github-script@v8
+      uses: actions/github-script@v9
       with:
         script: |
           const {default: artifact} = require('./packages/artifact/lib/artifact')
@@ -229,7 +229,7 @@ jobs:
       working-directory: packages/artifact
 
     - name: List and Download Artifacts
-      uses: actions/github-script@v8
+      uses: actions/github-script@v9
       with:
         script: |
           const {default: artifactClient} = require('./packages/artifact/lib/artifact')
@@ -299,7 +299,7 @@ jobs:
           }
 
     - name: Download and Verify Single File Artifacts
-      uses: actions/github-script@v8
+      uses: actions/github-script@v9
       with:
         script: |
           const {default: artifactClient} = require('./packages/artifact/lib/artifact')
@@ -363,7 +363,7 @@ jobs:
           }
 
     - name: Delete Artifacts
-      uses: actions/github-script@v8
+      uses: actions/github-script@v9
       with:
         script: |
           const {default: artifactClient} = require('./packages/artifact/lib/artifact')
