@@ -1,0 +1,40 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# RELEASE AUTOMATION — NEXUS ULTRA
+# ═══════════════════════════════════════════════════════════════════════════════
+# Stratégie :
+#   - Déclenchement à chaque push sur la branche principale (main/master).
+#   - Analyse des messages de commit (Conventional Commits).
+#   - Génération automatique du numéro de version (SemVer) et du Changelog.
+#   - Création de la Release GitHub avec les notes générées.
+#   - Assignation au mainteneur (Aissamohammedi88).
+# ═══════════════════════════════════════════════════════════════════════════════
+name: "🚀 Release Automation"
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: "📦 Semantic Release"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Run Release Please
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          release-type: node
+          # On peut spécifier le chemin du package si c'est un monorepo
+          # path: packages/core
+          changelog-notes-type: github
+          # Configuration du style des commits
+          bump-minor-pre-major: true
