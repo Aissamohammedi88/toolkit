@@ -29,13 +29,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: "Trivy FS Scan (Vulnérabilités & Secrets)"
-        uses: aquasecurity/trivy-action@0.32.0
+        # CORRECTION : Version 0.28.0 au lieu de 0.32.0
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
-          exit-code: '0' # 0 pour ne pas bloquer si faille trouvée, mais on upload le rapport
+          exit-code: '0'
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy SARIF
@@ -86,7 +87,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          # Le cache n'est activé QUE si un fichier a été trouvé
           cache: ${{ steps.detect_python.outputs.found == 'true' && 'pip' || '' }}
           cache-dependency-path: ${{ steps.detect_python.outputs.path }}
 
@@ -120,6 +120,7 @@ jobs:
           npm ci
           npm run build --if-present
           npm test --if-present
+
   # ─── JOB 3 : AUTO-MERGE (Dependabot uniquement) ─────────────────────────────
   auto-merge:
     name: "🤖 Auto-Merge (si sain)"
