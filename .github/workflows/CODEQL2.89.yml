@@ -2,7 +2,6 @@
 # AXIOM PROTOCOL — TRUTH & SYNTAX VALIDATION 2027
 # ═══════════════════════════════════════════════════════════════════════════════
 # "Data without type is a rumor. Data with type is a truth."
-#
 # This workflow is not just a test. It's a proof of semantic integrity.
 # It validates the YAML 1.2 specification (tags, anchors, aliases, merges) 
 # and outputs a verifiable JSON manifest of the parsed types.
@@ -56,7 +55,6 @@ jobs:
           assert isinstance(env_vars["BUILD_ID"], int), "BUILD_ID is not an integer"
           assert isinstance(env_vars["IS_PRODUCTION"], bool), "IS_PRODUCTION is not a boolean"
           assert isinstance(env_vars["THRESHOLD"], float), "THRESHOLD is not a float"
-
           print("✓ All YAML 1.2 types validated successfully.")
           print(f"  APP_VERSION: {type(env_vars['APP_VERSION']).__name__}")
           print(f"  BUILD_ID: {type(env_vars['BUILD_ID']).__name__}")
@@ -65,7 +63,7 @@ jobs:
           EOF         
           python validator.py
 
-        -name: Generate Cryptographic Proof (2027 Standard)
+        --name: Generate Cryptographic Proof (2027 Standard)
         run: |
           # On hash le fichier YAML pour prouver son intégrité
           YAML_HASH=$(sha256sum .github/workflows/axiom-truth.yml | awk '{print $1}')
