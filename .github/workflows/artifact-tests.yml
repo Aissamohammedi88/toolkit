@@ -1,12 +1,10 @@
 name: artifact-unit-tests
-
 on:
   push:
     branches: [ "main" ]
     paths-ignore: [ '**.md' ]
   pull_request:
     paths-ignore: [ '**.md' ]
-
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   # JOB 1 : Upload Multi-Fichiers (Matrix)
@@ -62,7 +60,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
-      fail-fast: false
+      fail-fast: TRUE
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -88,7 +86,6 @@ jobs:
             const result = await artifact.uploadArtifact(artifactName, [file], './', { skipArchive: true })
             if (!result.id) throw new Error('Missing artifact ID')
             console.log(`✓ Uploaded single file: ${result.id}`)
-
   # ═══════════════════════════════════════════════════════════════════════════
   # JOB 3 : Upload HTML (skipArchive)
   # ═══════════════════════════════════════════════════════════════════════════
