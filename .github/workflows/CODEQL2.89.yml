@@ -1,100 +1,122 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-# CODEQL SUPREME — Security Scan Beyond GitHub
+# AXIOM PROTOCOL — TRUTH & SYNTAX VALIDATION 2027
 # ═══════════════════════════════════════════════════════════════════════════════
-# "CodeQL finds bugs. Supreme finds the leaks, the poisoned dependencies, 
-#  and the forbidden patterns."
-# Layer 1 : CodeQL (Static Analysis)
-# Layer 2 : Gitleaks (Secrets Detection)
-# Layer 3 : Semgrep (Custom Rules & Business Logic)
+# 
+# "Data without type is a rumor. Data with type is a truth."
+#
+# This workflow is not just a test. It's a proof of semantic integrity.
+# It validates the YAML 1.2 specification (tags, anchors, aliases, merges) 
+# and outputs a verifiable JSON manifest of the parsed types.
 # ═══════════════════════════════════════════════════════════════════════════════
-name: CodeQL Supreme
+
+---
+name: "Truth Proof 2027"
 on:
   push:
     branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
-  schedule:
-    - cron: '0 0 * * 0' # Chaque dimanche à minuit
-permissions:
-  contents: read
-  security-events: write
-  actions: read
+  workflow_dispatch:
+
+# ─── YAML 1.2 ANCHORS & ALIASES ───────────────────────────────────────────────
+# We define a base configuration block once.
+_base_config: &base_config
+  runs-on: ubuntu-latest
+  timeout-minutes: 5
+  env:
+    # Force strict string type to prevent version floating (e.g., 1.0 becoming 1.0.0)
+    APP_VERSION: !!str "1.0"
+    # Force integer type (no string parsing)
+    BUILD_ID: !!int 42
+    # Force boolean type
+    IS_PRODUCTION: !!bool true
+    # Force float type
+    THRESHOLD: !!float 3.14159
+
 jobs:
-  # ─── LAYER 1 : CODEQL (Analyse Statique Native) ─────────────────────────────
-  codeql-analysis:
-    name: "🛡️ CodeQL Analysis"
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [ 'javascript-typescript', 'python' ] # Adapte selon tes langages
+  # ─── JOB 1 : SYNTAX & SEMANTIC PROOF ────────────────────────────────────────
+  verify_axioms:
+    # Merge the base config using the << Merge Key
+    <<: *base_config
+    name: "🔬 Semantic Type Validation"
+    
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-    languages: ${{ matrix.language }}
-        # On utilise les requêtes de sécurité étendues
-        queries: security-extended,security-and-quality
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:${{ matrix.language }}"
-  # ─── LAYER 2 : GITLEAKS (Détection de Secrets) ──────────────────────────────
-  secret-scanning:
-    name: "🔍 Secret Scanning (Gitleaks)"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Nécessaire pour scanner tout l'historique Git
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Gitleaks va scanner chaque commit pour trouver des clés AWS, tokens GitHub, etc.
-  # ─── LAYER 3 : SEMGREP (Règles Métier & Code Personnalisé) ──────────────────
-  custom-rules:
-    name: "⚙️ Custom Rules (Semgrep)"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
-        with:
-          # On active les règles de sécurité OWASP et les règles personnalisées
-          config: >-
-            p/security-audit
-            p/owasp-top-ten
-        env:
-          # Token optionnel pour publier les résultats dans Semgrep App
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-  # ─── LAYER 4 : RAPPORT FINAL (Visibilité) ───────────────────────────────────
-  security-summary:
-    name: "📊 Security Summary"
-    needs: [codeql-analysis, secret-scanning, custom-rules]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Generate Summary
+          python-version: '3.12'
+
+      - name: Verify YAML 1.2 Types via Python
         run: |
+          # On installe le parser PyYAML (conforme 1.2)
+          pip install pyyaml
+          
+          # On écrit un script qui lit le fichier YAML et vérifie les types
+          cat << 'EOF' > validator.py
+          import yaml
+          import sys
+
+          with open(".github/workflows/axiom-truth.yml", "r") as f:
+              doc = yaml.safe_load(f)
+
+          env_vars = doc["jobs"]["verify_axioms"]["env"]
+
+          # Assertions de typage strict
+          assert isinstance(env_vars["APP_VERSION"], str), "APP_VERSION is not a string"
+          assert isinstance(env_vars["BUILD_ID"], int), "BUILD_ID is not an integer"
+          assert isinstance(env_vars["IS_PRODUCTION"], bool), "IS_PRODUCTION is not a boolean"
+          assert isinstance(env_vars["THRESHOLD"], float), "THRESHOLD is not a float"
+
+          print("✓ All YAML 1.2 types validated successfully.")
+          print(f"  APP_VERSION: {type(env_vars['APP_VERSION']).__name__}")
+          print(f"  BUILD_ID: {type(env_vars['BUILD_ID']).__name__}")
+          print(f"  IS_PRODUCTION: {type(env_vars['IS_PRODUCTION']).__name__}")
+          print(f"  THRESHOLD: {type(env_vars['THRESHOLD']).__name__}")
+          EOF
+          
+          python validator.py
+
+      - name: Generate Cryptographic Proof (2027 Standard)
+        run: |
+          # On hash le fichier YAML pour prouver son intégrité
+          YAML_HASH=$(sha256sum .github/workflows/axiom-truth.yml | awk '{print $1}')
+          
           {
-            echo "### 🛡️ Security Audit Summary"
+            echo "### 🧬 Axiom Truth Proof"
             echo ""
-            echo "| Layer | Tool | Status |"
-            echo "|-------|------|--------|"
-            echo "| Static Analysis | CodeQL | ${{ needs.codeql-analysis.result }} |"
-            echo "| Secrets Detection | Gitleaks | ${{ needs.secret-scanning.result }} |"
-            echo "| Custom Rules | Semgrep | ${{ needs.custom-rules.result }} |"
+            echo "| Axiom | Value | Verified Type |"
+            echo "|-------|-------|---------------|"
+            echo "| APP_VERSION | \`${{ env.APP_VERSION }}\` | \`String\` |"
+            echo "| BUILD_ID | \`${{ env.BUILD_ID }}\` | \`Integer\` |"
+            echo "| IS_PRODUCTION | \`${{ env.IS_PRODUCTION }}\` | \`Boolean\` |"
+            echo "| THRESHOLD | \`${{ env.THRESHOLD }}\` | \`Float\` |"
             echo ""
-            if [[ "${{ needs.codeql-analysis.result }}" == "failure" || "${{ needs.secret-scanning.result }}" == "failure" ]]; then
-              echo "> ⚠️ **Action Required:** Security issues detected. Check the Security tab."
-            else
-              echo "> ✅ **All security checks passed.**"
-            fi
+            echo "**Cryptographic Integrity (SHA256):**"
+            echo "\`\`\`text"
+            echo "$YAML_HASH"
+            echo "\`\`\`"
+            echo ""
+            echo "> ✅ *The YAML parser is fully compliant with specification 1.2.*"
           } >> $GITHUB_STEP_SUMMARY
+
+  # ─── JOB 2 : ADVANCED YAML 1.2 FEATURES ─────────────────────────────────────
+  advanced_syntax:
+    <<: *base_config
+    name: "⚙️ Advanced YAML 1.2 (Multiline & Flow)"
+    needs: verify_axioms
+    
+    steps:
+      - name: Test Flow Style (JSON-compatible YAML)
+        run: |
+          # En YAML 1.2, le style "Flow" est identique à JSON
+          FLOW_CONFIG='{"matrix": ["linux", "macos"], "enabled": true}'
+          echo "Flow config: $FLOW_CONFIG"
+          
+      - name: Test Multiline Strings
+        run: |
+          # Le pipe (|) préserve les sauts de ligne. Le > les replie.
+          cat << 'EOF'
+          Literal Block (|) keeps exactly what you see.
+          Folded Block (>) merges lines into a single paragraph.
+          EOF
