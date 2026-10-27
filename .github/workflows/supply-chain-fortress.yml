@@ -1,5 +1,4 @@
 name: Nexus Enterprise Guardian
-
 on:
   workflow_call:
     inputs:
@@ -46,7 +45,6 @@ jobs:
         with:
           path: ./
           extra_args: --only-verified --json
-
       - name: Upload SARIF Gitleaks
         if: always()
         uses: github/codeql-action/upload-sarif@v3
