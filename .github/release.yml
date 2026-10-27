@@ -9,17 +9,14 @@
 #   - Assignation au mainteneur (Aissamohammedi88).
 # ═══════════════════════════════════════════════════════════════════════════════
 name: "🚀 Release Automation"
-
 on:
   push:
     branches:
       - main
       - master
-
 permissions:
   contents: write
   pull-requests: write
-
 jobs:
   release-please:
     name: "📦 Semantic Release"
@@ -27,7 +24,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
       - name: Run Release Please
         uses: googleapis/release-please-action@v4
         with:
