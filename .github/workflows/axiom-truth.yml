@@ -33,7 +33,7 @@ jobs:
           import yaml
           import sys
           with open(".github/workflows/axiom-truth.yml", "r") as f:
-              doc = yaml.safe_load(f)
+          doc = yaml.safe_load(f)
           env_vars = doc["jobs"]["verify_axioms"]["env"]
           # Assertions de typage strict
           assert isinstance(env_vars["APP_VERSION"], str), "APP_VERSION is not a string"
@@ -51,6 +51,7 @@ jobs:
         run: |
           YAML_HASH=$(sha256sum .github/workflows/axiom-truth.yml | awk '{print $1}')
           {
+          
             echo "### 🧬 Axiom Truth Proof"
             echo ""
             echo "| Axiom | Value | Verified Type |"
@@ -68,6 +69,7 @@ jobs:
             echo ""
             echo "> ✅ *The YAML parser is fully compliant with specification 1.2.*"
           } >> $GITHUB_STEP_SUMMARY
+          
   # ─── JOB 2 : ADVANCED YAML 1.2 FEATURES (Alias & Merge) ─────────────────────
   advanced_syntax:
     name: "⚙️ Advanced YAML 1.2 (Multiline & Flow)"
