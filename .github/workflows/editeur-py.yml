@@ -1,0 +1,1885 @@
+#!/usr/bin/env python3
+
+# -*- coding: utf-8 -*-
+
+"""
+
+MD STUDIO v1.0.0
+
+Éditeur Markdown professionnel local (style README GitHub, en mieux).
+
+Live preview · Toolbar · Fichiers · Export HTML · Sommaire auto
+
+Localhost uniquement. Port : 9289
+
+"""
+
+
+
+import os
+
+import json
+
+import shutil
+
+import http.server
+
+import socketserver
+
+import urllib.parse
+
+from pathlib import Path
+
+
+
+VERSION = "1.0.0"
+
+PORT = int(os.environ.get("MDSTUDIO_PORT", 9289))
+
+HOST = os.environ.get("MDSTUDIO_HOST", "127.0.0.1")
+
+WORKSPACE = Path(os.path.expanduser("~/Documents/md_studio_workspace"))
+
+WORKSPACE.mkdir(parents=True, exist_ok=True)
+
+
+
+# ═══════════════════════════════════════════════════════════════════
+
+# PAGE UNIQUE (éditeur + aperçu + JS)
+
+# ═══════════════════════════════════════════════════════════════════
+
+
+
+HTML_PAGE = r"""<!DOCTYPE html>
+
+<html lang="fr">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>MD STUDIO — __PORT__</title>
+
+<style>
+
+:root{
+
+  --bg:#0b1020;--panel:#111a30;--panel2:#0d1526;--border:#223252;
+
+  --cyan:#22d3ee;--green:#34d399;--pink:#f472b6;--gold:#fbbf24;
+
+  --text:#dbe7ff;--dim:#7a93b8;
+
+  --editor-bg:#0a0f1e;--editor-fg:#a9e6c9;
+
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+html,body{height:100%;overflow:hidden}
+
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;font-size:14px}
+
+
+
+/* ── Header ── */
+
+.header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+
+.header h1{font-size:16px;font-weight:800;background:linear-gradient(135deg,var(--cyan),var(--pink));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+.badge{background:linear-gradient(135deg,var(--cyan),var(--pink));color:#000;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:900;-webkit-text-fill-color:#000;margin-left:8px}
+
+.hact{display:flex;gap:8px;flex-wrap:wrap}
+
+.btn{background:linear-gradient(135deg,var(--cyan),#a78bfa);color:#000;border:none;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit}
+
+.btn:hover{opacity:.88}
+
+.btn.sec{background:transparent;color:var(--cyan);border:1px solid var(--cyan)}
+
+.btn.green{background:linear-gradient(135deg,var(--green),var(--cyan))}
+
+
+
+/* ── Toolbar ── */
+
+.toolbar{display:flex;gap:4px;align-items:center;padding:6px 10px;background:var(--panel2);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0}
+
+.tbtn{background:#152238;border:1px solid var(--border);color:var(--text);min-width:32px;height:30px;border-radius:6px;cursor:pointer;font-size:13px;padding:0 8px;font-family:inherit;line-height:1}
+
+.tbtn:hover{border-color:var(--cyan);color:var(--cyan)}
+
+.tbtn.wide{padding:0 12px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
+
+.tsep{width:1px;height:20px;background:var(--border);margin:0 6px;flex-shrink:0}
+
+
+
+/* ── Layout ── */
+
+.main{display:flex;flex:1;overflow:hidden}
+
+
+
+/* ── Sidebar ── */
+
+.sidebar{width:240px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+
+.side-head{padding:10px 12px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+
+.file-list{flex:1;overflow-y:auto;padding:6px}
+
+.file-item{padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px;font-family:ui-monospace,Menlo,monospace;display:flex;justify-content:space-between;align-items:center;gap:6px}
+
+.file-item:hover{background:rgba(34,211,238,.08)}
+
+.file-item.active{background:rgba(34,211,238,.18);color:var(--cyan)}
+
+.file-item .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.file-item .del{opacity:0;color:var(--pink);font-weight:700;padding:0 4px;flex-shrink:0}
+
+.file-item:hover .del{opacity:1}
+
+.file-empty{color:var(--dim);font-size:11px;padding:10px}
+
+
+
+/* ── Panes ── */
+
+.panes{flex:1;display:flex;overflow:hidden;min-width:0}
+
+.pane-editor{flex:1;display:flex;overflow:hidden;min-width:0;background:var(--editor-bg)}
+
+.pane-preview{flex:1;min-width:0;display:none;background:#fff;border-left:1px solid var(--border)}
+
+body.mode-split .pane-editor{display:flex}
+
+body.mode-split .pane-preview{display:block}
+
+body.mode-edit .pane-editor{display:flex}
+
+body.mode-edit .pane-preview{display:none}
+
+body.mode-preview .pane-editor{display:none}
+
+body.mode-preview .pane-preview{display:block;border-left:none}
+
+.pane-preview iframe{width:100%;height:100%;border:none;background:#fff;display:block}
+
+
+
+/* ── Éditeur + numéros de ligne ── */
+
+.gutter{width:52px;flex-shrink:0;overflow:hidden;background:#0d1526;text-align:right;color:#3d5a80;font:12px/1.62 ui-monospace,Menlo,Consolas,monospace;padding:12px 8px 12px 0;user-select:none;border-right:1px solid var(--border);white-space:pre;margin:0}
+
+.gutter pre{font:inherit;color:inherit;white-space:pre;margin:0}
+
+#editor{flex:1;background:var(--editor-bg);color:var(--editor-fg);border:none;outline:none;resize:none;padding:12px 14px;font:13px/1.62 ui-monospace,Menlo,Consolas,monospace;tab-size:2;white-space:pre;overflow:auto;caret-color:var(--cyan)}
+
+#editor::placeholder{color:#3d5a80}
+
+
+
+/* ── Thème clair ── */
+
+body.light{--editor-bg:#ffffff;--editor-fg:#1f2937;--bg:#f1f5f9;--panel:#ffffff;--panel2:#f8fafc;--border:#d7dee9;--text:#1e293b;--dim:#64748b}
+
+body.light .gutter{background:#f3f4f6;color:#9ca3af}
+
+body.light .tbtn{background:#eef2f7}
+
+body.light{background:#e9eef5}
+
+
+
+/* ── Statusbar ── */
+
+.statusbar{display:flex;gap:14px;align-items:center;padding:5px 14px;background:var(--panel);border-top:1px solid var(--border);font-size:11px;color:var(--dim);flex-shrink:0;flex-wrap:wrap}
+
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
+
+.dot.dirty{background:var(--gold)}
+
+
+
+/* ── Modal / Toast ── */
+
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px}
+
+.modal.show{display:flex}
+
+.modal-box{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+
+.modal-box h2{color:var(--cyan);margin-bottom:14px;font-size:16px}
+
+.modal-box label{display:block;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 4px}
+
+.modal-box input{width:100%;background:var(--editor-bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font:13px ui-monospace,Menlo,monospace;outline:none}
+
+.modal-box input:focus{border-color:var(--cyan)}
+
+.modal-actions{display:flex;gap:8px;margin-top:20px;justify-content:flex-end}
+
+.toast{position:fixed;bottom:50px;right:20px;background:var(--panel);border:1px solid var(--cyan);border-radius:10px;padding:12px 18px;font-size:13px;z-index:2000;animation:slideIn .25s ease;max-width:320px}
+
+.toast.error{border-color:var(--pink);color:var(--pink)}
+
+.toast.ok{border-color:var(--green);color:var(--green)}
+
+@keyframes slideIn{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+</style>
+
+</head>
+
+<body class="mode-split">
+
+
+
+<div class="header">
+
+  <h1>📝 MD STUDIO<span class="badge">PORT __PORT__</span></h1>
+
+  <div class="hact">
+
+    <button class="btn sm" style="padding:6px 12px" onclick="newFile()">+ Nouveau</button>
+
+    <button class="btn green" style="padding:6px 12px" onclick="saveFile()">💾 Sauver</button>
+
+    <button class="btn sec" style="padding:6px 12px" onclick="saveFile(true)">Sous…</button>
+
+    <button class="btn sec" style="padding:6px 12px" onclick="exportHtml()">⬇ HTML</button>
+
+    <button class="btn sec" style="padding:6px 12px" onclick="printPreview()">🖨</button>
+
+    <button class="btn" style="padding:6px 12px" onclick="insertToc()">📑 Sommaire</button>
+
+    <button class="btn sec" style="padding:6px 12px" onclick="toggleTheme()">🌓</button>
+
+  </div>
+
+</div>
+
+
+
+<div class="toolbar">
+
+  <button class="tbtn" title="Gras (Ctrl+B)" onclick="actions.bold()"><b>B</b></button>
+
+  <button class="tbtn" title="Italique (Ctrl+I)" onclick="actions.italic()"><i>I</i></button>
+
+  <button class="tbtn" title="Barré" onclick="actions.strike()"><s>S</s></button>
+
+  <button class="tbtn" title="Code inline" onclick="actions.code()">&lt;/&gt;</button>
+
+  <span class="tsep"></span>
+
+  <button class="tbtn" onclick="actions.h1()">H1</button>
+
+  <button class="tbtn" onclick="actions.h2()">H2</button>
+
+  <button class="tbtn" onclick="actions.h3()">H3</button>
+
+  <span class="tsep"></span>
+
+  <button class="tbtn" title="Citation" onclick="actions.quote()">❝</button>
+
+  <button class="tbtn" title="Liste à puces" onclick="actions.ul()">•≡</button>
+
+  <button class="tbtn" title="Liste numérotée" onclick="actions.ol()">1≡</button>
+
+  <button class="tbtn" title="Liste de tâches" onclick="actions.task()">☑</button>
+
+  <button class="tbtn" title="Tableau" onclick="actions.table()">⊞</button>
+
+  <button class="tbtn" title="Séparateur" onclick="actions.hr()">―</button>
+
+  <span class="tsep"></span>
+
+  <button class="tbtn" title="Lien (Ctrl+K)" onclick="actions.link()">🔗</button>
+
+  <button class="tbtn" title="Image" onclick="actions.image()">🖼</button>
+
+  <span class="tsep"></span>
+
+  <button class="tbtn wide" onclick="refreshPreview()">⟳ Aperçu</button>
+
+  <label class="tbtn wide"><input type="checkbox" id="live-toggle" checked> Live</label>
+
+  <span style="flex:1"></span>
+
+  <button class="tbtn wide" onclick="setMode('split')">◧ Scindé</button>
+
+  <button class="tbtn wide" onclick="setMode('edit')">✎ Éditeur</button>
+
+  <button class="tbtn wide" onclick="setMode('preview')">👁 Aperçu</button>
+
+</div>
+
+
+
+<div class="main">
+
+  <div class="sidebar">
+
+    <div class="side-head"><span>Fichiers</span><span style="text-transform:none;color:var(--cyan)">.md</span></div>
+
+    <div class="file-list" id="file-list"></div>
+
+  </div>
+
+  <div class="panes">
+
+    <div class="pane-editor">
+
+      <div class="gutter" id="gutter"><pre id="gutter-inner">1</pre></div>
+
+      <textarea id="editor" spellcheck="false" placeholder="# Ton super README.md…"></textarea>
+
+    </div>
+
+    <div class="pane-preview" id="pane-preview">
+
+      <iframe id="preview-frame" title="Aperçu Markdown"></iframe>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+
+<div class="statusbar">
+
+  <span class="dot" id="saved-dot"></span>
+
+  <span id="st-file">sans titre</span>
+
+  <span>·</span>
+
+  <span id="st-lines">0 lignes</span>
+
+  <span id="st-words">0 mots</span>
+
+  <span id="st-chars">0 car.</span>
+
+  <span id="st-read"></span>
+
+  <span style="flex:1"></span>
+
+  <span id="st-cursor">Ln 1, Col 1</span>
+
+  <span>Markdown</span>
+
+</div>
+
+
+
+<div class="modal" id="modal">
+
+  <div class="modal-box">
+
+    <h2 id="modal-title">Titre</h2>
+
+    <label id="modal-label">Champ</label>
+
+    <input id="modal-input" autocomplete="off">
+
+    <div class="modal-actions">
+
+      <button class="btn sec" id="modal-cancel">Annuler</button>
+
+      <button class="btn green" id="modal-ok">OK</button>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+
+<div class="toast" id="toast" style="display:none"></div>
+
+
+
+<script>
+
+"use strict";
+
+const $ = id => document.getElementById(id);
+
+const editor = $('editor'), gutter = $('gutter'), gutterInner = $('gutter-inner'), frame = $('preview-frame');
+
+
+
+const state = {
+
+  files: [], current: null, dirty: false, savedContent: '',
+
+  live: true, previewTimer: null, draftTimer: null
+
+};
+
+
+
+/* ══════════════ Utilitaires UI ══════════════ */
+
+
+
+function toast(msg, type){
+
+  const t = $('toast');
+
+  t.textContent = msg;
+
+  t.className = 'toast ' + (type || 'ok');
+
+  t.style.display = 'block';
+
+  clearTimeout(window._tt);
+
+  window._tt = setTimeout(() => { t.style.display = 'none'; }, 2800);
+
+}
+
+
+
+function ask(title, label, def){
+
+  return new Promise(resolve => {
+
+    $('modal-title').textContent = title;
+
+    $('modal-label').textContent = label;
+
+    const inp = $('modal-input');
+
+    inp.value = def || '';
+
+    const done = v => { closeModal(); resolve(v); };
+
+    $('modal-ok').onclick = () => done(inp.value.trim() || null);
+
+    $('modal-cancel').onclick = () => done(null);
+
+    inp.onkeydown = e => {
+
+      if (e.key === 'Enter') done(inp.value.trim() || null);
+
+      if (e.key === 'Escape') done(null);
+
+    };
+
+    $('modal').classList.add('show');
+
+    setTimeout(() => { inp.focus(); inp.select(); }, 60);
+
+  });
+
+}
+
+function closeModal(){ $('modal').classList.remove('show'); }
+
+
+
+/* ══════════════ API ══════════════ */
+
+
+
+async function api(url, method, body){
+
+  try {
+
+    const opts = { method: method || 'GET', headers: { 'Content-Type': 'application/json' } };
+
+    if (body) opts.body = JSON.stringify(body);
+
+    const r = await fetch(url, opts);
+
+    return await r.json();
+
+  } catch (e) { return { error: e.message }; }
+
+}
+
+
+
+async function loadFiles(){
+
+  const d = await api('/api/files');
+
+  if (d.error) { toast(d.error, 'error'); return; }
+
+  state.files = d.files || [];
+
+  renderFiles();
+
+}
+
+
+
+function renderFiles(){
+
+  const el = $('file-list');
+
+  el.innerHTML = '';
+
+  const items = state.files.filter(f => !f.is_dir && !f.name.startsWith('.'));
+
+  if (!items.length) { el.innerHTML = '<div class="file-empty">Aucun fichier. Crée ton premier README.md !</div>'; return; }
+
+  items.forEach(f => {
+
+    const div = document.createElement('div');
+
+    div.className = 'file-item' + (state.current === f.path ? ' active' : '');
+
+    div.innerHTML = '<span class="fname">📄 ' + f.name + '</span><span class="del" title="Supprimer">✕</span>';
+
+    div.onclick = () => openFile(f.path);
+
+    div.querySelector('.del').onclick = ev => deleteFile(f.path, ev);
+
+    el.appendChild(div);
+
+  });
+
+}
+
+
+
+async function openFile(path, skipConfirm){
+
+  if (state.dirty && !skipConfirm && !confirm('Modifications non sauvegardées. Ouvrir quand même ?')) return;
+
+  const d = await api('/api/read?path=' + encodeURIComponent(path));
+
+  if (d.error) { toast(d.error, 'error'); return; }
+
+  state.current = path;
+
+  editor.value = d.content || '';
+
+  state.savedContent = editor.value;
+
+  state.dirty = false;
+
+  updateSaved(); onEdit();
+
+  document.title = path + ' — MD STUDIO';
+
+  renderFiles();
+
+  refreshPreview();
+
+  checkDraft();
+
+}
+
+
+
+async function newFile(){
+
+  const name = await ask('Nouveau fichier', 'Nom (ex : README.md)', 'README.md');
+
+  if (!name) return;
+
+  const d = await api('/api/save', 'POST', { path: name, content: '' });
+
+  if (d.error) { toast(d.error, 'error'); return; }
+
+  await loadFiles();
+
+  openFile(name, true);
+
+}
+
+
+
+async function saveFile(saveAs){
+
+  let path = state.current;
+
+  if (saveAs || !path) {
+
+    path = await ask('Enregistrer sous', 'Nom du fichier', path || 'README.md');
+
+    if (!path) return;
+
+  }
+
+  const d = await api('/api/save', 'POST', { path: path, content: editor.value });
+
+  if (d.error) { toast(d.error, 'error'); return; }
+
+  state.current = path;
+
+  state.savedContent = editor.value;
+
+  state.dirty = false;
+
+  localStorage.removeItem('draft:' + path);
+
+  updateSaved(); renderFiles();
+
+  toast('✅ Sauvegardé : ' + path, 'ok');
+
+  document.title = path + ' — MD STUDIO';
+
+}
+
+
+
+async function deleteFile(path, ev){
+
+  ev.stopPropagation();
+
+  if (!confirm('Supprimer ' + path + ' ?')) return;
+
+  const d = await api('/api/delete', 'POST', { path: path });
+
+  if (d.error) { toast(d.error, 'error'); return; }
+
+  if (state.current === path) {
+
+    state.current = null; editor.value = ''; state.savedContent = '';
+
+    updateSaved(); onEdit(); refreshPreview();
+
+  }
+
+  toast('Supprimé : ' + path, 'ok');
+
+  loadFiles();
+
+}
+
+
+
+/* ══════════════ État / stats ══════════════ */
+
+
+
+function updateSaved(){
+
+  $('saved-dot').className = 'dot' + (state.dirty ? ' dirty' : '');
+
+  $('st-file').textContent = state.current || 'sans titre';
+
+}
+
+
+
+function updateStats(){
+
+  const v = editor.value;
+
+  const lines = v ? v.split('\n').length : 0;
+
+  const words = v.trim() ? v.trim().split(/\s+/).length : 0;
+
+  $('st-lines').textContent = lines + ' lignes';
+
+  $('st-words').textContent = words + ' mots';
+
+  $('st-chars').textContent = v.length + ' car.';
+
+  $('st-read').textContent = words ? '~' + Math.max(1, Math.ceil(words / 200)) + ' min de lecture' : '';
+
+}
+
+
+
+function updateCursor(){
+
+  const pos = editor.selectionStart;
+
+  const before = editor.value.slice(0, pos);
+
+  const ln = before.split('\n').length;
+
+  const col = pos - before.lastIndexOf('\n');
+
+  $('st-cursor').textContent = 'Ln ' + ln + ', Col ' + col;
+
+}
+
+
+
+function updateGutter(){
+
+  const n = editor.value.split('\n').length;
+
+  let h = '';
+
+  for (let i = 1; i <= n; i++) h += i + '\n';
+
+  gutterInner.textContent = h;
+
+}
+
+
+
+function onEdit(){
+
+  state.dirty = editor.value !== state.savedContent;
+
+  updateSaved(); updateStats(); updateGutter(); updateCursor();
+
+  schedulePreview(); scheduleDraft();
+
+}
+
+
+
+function scheduleDraft(){
+
+  clearTimeout(state.draftTimer);
+
+  state.draftTimer = setTimeout(() => {
+
+    if (state.current && state.dirty) localStorage.setItem('draft:' + state.current, editor.value);
+
+  }, 2000);
+
+}
+
+
+
+function checkDraft(){
+
+  if (!state.current) return;
+
+  const d = localStorage.getItem('draft:' + state.current);
+
+  if (d && d !== editor.value && confirm('Brouillon local trouvé (non sauvegardé). Le restaurer ?')) {
+
+    editor.value = d; onEdit(); refreshPreview();
+
+  }
+
+}
+
+
+
+/* ══════════════ Insertion / toolbar ══════════════ */
+
+
+
+function insert(text){
+
+  const s = editor.selectionStart;
+
+  editor.setRangeText(text, s, editor.selectionEnd, 'end');
+
+  editor.focus(); onEdit();
+
+}
+
+
+
+function wrap(before, after, placeholder){
+
+  const s = editor.selectionStart, e = editor.selectionEnd;
+
+  const sel = editor.value.slice(s, e);
+
+  if (!sel) {
+
+    insert(before + placeholder + after);
+
+    const p = s + before.length;
+
+    editor.setSelectionRange(p, p + placeholder.length);
+
+  } else {
+
+    editor.setRangeText(before + sel + after, s, e, 'select');
+
+    editor.setSelectionRange(s + before.length, e + before.length);
+
+  }
+
+  editor.focus(); onEdit();
+
+}
+
+
+
+function prefix(p){
+
+  const s = editor.selectionStart, e = editor.selectionEnd;
+
+  const before = editor.value.slice(0, s);
+
+  const sel = editor.value.slice(s, e) || ('ligne ' + p.trim());
+
+  const after = editor.value.slice(e);
+
+  const replaced = sel.split('\n').map(l => p + l).join('\n');
+
+  editor.value = before + replaced + after;
+
+  editor.setSelectionRange(s, s + replaced.length);
+
+  editor.focus(); onEdit();
+
+}
+
+
+
+async function insertTable(){
+
+  const rows = await ask('Tableau', 'Lignes (hors en-tête)', '3');
+
+  if (rows === null) return;
+
+  const cols = await ask('Tableau', 'Colonnes', '3');
+
+  if (cols === null) return;
+
+  const R = Math.min(50, Math.max(1, parseInt(rows) || 1));
+
+  const C = Math.min(12, Math.max(1, parseInt(cols) || 1));
+
+  let md = '\n| ' + Array(C).fill('En-tête').join(' | ') + ' |\n';
+
+  md += '|' + Array(C).fill(' --- ').join('|') + '|\n';
+
+  for (let i = 0; i < R; i++) md += '|' + Array(C).fill(' ').join('|') + '|\n';
+
+  insert(md + '\n');
+
+}
+
+
+
+const actions = {
+
+  bold:   () => wrap('**', '**', 'gras'),
+
+  italic: () => wrap('*', '*', 'italique'),
+
+  strike: () => wrap('~~', '~~', 'barré'),
+
+  code:   () => wrap('`', '`', 'code'),
+
+  codeblock: () => wrap('\n```\n', '\n```\n', 'console.log(42)'),
+
+  h1: () => prefix('# '),
+
+  h2: () => prefix('## '),
+
+  h3: () => prefix('### '),
+
+  quote: () => prefix('> '),
+
+  ul:   () => prefix('- '),
+
+  ol:   () => prefix('1. '),
+
+  task: () => prefix('- [ ] '),
+
+  hr:   () => insert('\n---\n'),
+
+  link: async () => {
+
+    const url = await ask('Lien', 'URL', 'https://');
+
+    if (url === null) return;
+
+    wrap('[', '](' + url + ')', 'texte du lien');
+
+  },
+
+  image: async () => {
+
+    const url = await ask('Image', 'URL de l\u2019image', 'https://');
+
+    if (url === null) return;
+
+    insert('![alt](' + url + ')');
+
+  },
+
+  table: insertTable
+
+};
+
+
+
+/* ══════════════ Sommaire ══════════════ */
+
+
+
+function slug(s){
+
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+    .replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
+
+}
+
+
+
+function insertToc(){
+
+  const items = [];
+
+  editor.value.split('\n').forEach(l => {
+
+    const m = l.match(/^(#{1,3})\s+(.+)/);
+
+    if (m) items.push({ level: m[1].length, text: m[2].trim().replace(/#+$/, '').trim() });
+
+  });
+
+  if (!items.length) { toast('Aucun titre trouvé', 'error'); return; }
+
+  let md = '\n## 📑 Sommaire\n\n';
+
+  items.forEach(it => { md += '  '.repeat(it.level - 1) + '- [' + it.text + '](#' + slug(it.text) + ')\n'; });
+
+  insert(md + '\n');
+
+}
+
+
+
+/* ══════════════ Moteur Markdown (GFM subset) ══════════════ */
+
+
+
+function escapeHtml(s){
+
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+}
+
+
+
+function inline(text){
+
+  const codes = [];
+
+  text = text.replace(/`([^`]+)`/g, (m, c) => {
+
+    codes.push('<code>' + c + '</code>');
+
+    return '\u0001' + (codes.length - 1) + '\u0001';
+
+  });
+
+  text = escapeHtml(text);
+
+  text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g,
+
+    (m, alt, url, t) => '<img src="' + url + '" alt="' + alt + '"' + (t ? ' title="' + t + '"' : '') + ' loading="lazy">');
+
+  text = text.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g,
+
+    (m, t, url, ti) => '<a href="' + url + '"' + (ti ? ' title="' + ti + '"' : '') + ' target="_blank" rel="noopener">' + t + '</a>');
+
+  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+  text = text.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+
+  text = text.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+
+  text = text.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+
+  text = text.replace(/(^|[^A-Za-z0-9_])_([^_\n]+)_(?![A-Za-z0-9_])/g, '$1<em>$2</em>');
+
+  text = text.replace(/\u0001(\d+)\u0001/g, (m, i) => codes[+i]);
+
+  return text;
+
+}
+
+
+
+function renderMarkdown(src){
+
+  const lines = src.replace(/\r\n?/g, '\n').split('\n');
+
+  const out = [];
+
+  let i = 0;
+
+  const isSep = l => l.indexOf('|') > -1 && l.indexOf('-') > -1 && /^\s*\|?[\s:\-|]+\|?\s*$/.test(l);
+
+  const blockStart = (l, j) =>
+
+    /^```/.test(l) || /^#{1,6}\s/.test(l) ||
+
+    /^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(l) ||
+
+    /^\s*>/.test(l) || /^\s*([-*+]|\d+\.)\s+/.test(l) ||
+
+    (l.indexOf('|') > -1 && j + 1 < lines.length && isSep(lines[j + 1])) ||
+
+    /^\s*<[a-zA-Z\/!]/.test(l);
+
+
+
+  while (i < lines.length) {
+
+    const line = lines[i];
+
+    if (/^\s*$/.test(line)) { i++; continue; }
+
+
+
+    // Bloc HTML brut
+
+    if (/^\s*<[a-zA-Z\/!]/.test(line)) {
+
+      const buf = [];
+
+      while (i < lines.length && !/^\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
+
+      out.push(buf.join('\n'));
+
+      continue;
+
+    }
+
+
+
+    // Bloc de code ```
+
+    let m = line.match(/^```(\w*)\s*$/);
+
+    if (m) {
+
+      const lang = m[1], buf = [];
+
+      i++;
+
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
+
+      i++;
+
+      out.push('<pre class="cb"><code>' + escapeHtml(buf.join('\n')) + '</code></pre>');
+
+      continue;
+
+    }
+
+
+
+    // Titres
+
+    m = line.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
+
+    if (m) {
+
+      const lvl = m[1].length;
+
+      const id = lvl <= 3 ? ' id="' + slug(m[2]) + '"' : '';
+
+      out.push('<h' + lvl + id + '>' + inline(m[2]) + '</h' + lvl + '>');
+
+      i++; continue;
+
+    }
+
+
+
+    // Séparateur
+
+    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { out.push('<hr>'); i++; continue; }
+
+
+
+    // Citation
+
+    if (/^\s*>/.test(line)) {
+
+      const buf = [];
+
+      while (i < lines.length && /^\s*>/.test(lines[i])) { buf.push(lines[i].replace(/^\s*>\s?/, '')); i++; }
+
+      out.push('<blockquote>' + renderMarkdown(buf.join('\n')) + '</blockquote>');
+
+      continue;
+
+    }
+
+
+
+    // Tableau
+
+    if (line.indexOf('|') > -1 && i + 1 < lines.length && isSep(lines[i + 1])) {
+
+      const split = l => l.trim().replace(/^\|/, '').replace(/\|\s*$/, '').split('|');
+
+      const head = split(line); i += 2;
+
+      const rows = [];
+
+      while (i < lines.length && lines[i].indexOf('|') > -1 && !/^\s*$/.test(lines[i])) { rows.push(split(lines[i])); i++; }
+
+      let h = '<div class="tw"><table><thead><tr>' + head.map(c => '<th>' + inline(c.trim()) + '</th>').join('') + '</tr></thead><tbody>';
+
+      h += rows.map(r => '<tr>' + r.map(c => '<td>' + inline(c.trim()) + '</td>').join('') + '</tr>').join('');
+
+      h += '</tbody></table></div>';
+
+      out.push(h); continue;
+
+    }
+
+
+
+    // Listes (puces / numérotées / tâches, imbrication simple)
+
+    m = line.match(/^(\s*)([-*+]|\d+\.)\s+(.*)$/);
+
+    if (m) {
+
+      const base = m[1].length;
+
+      const items = [];
+
+      while (i < lines.length) {
+
+        const mm = lines[i].match(/^(\s*)([-*+]|\d+\.)\s+(.*)$/);
+
+        if (!mm) break;
+
+        if (mm[1].length > base) {
+
+          if (items.length) items[items.length - 1].sub.push(mm[3]);
+
+          i++; continue;
+
+        }
+
+        items.push({ t: mm[3], o: /^\d/.test(mm[2]), sub: [] });
+
+        i++;
+
+      }
+
+      const renderItems = list =>
+
+        '<' + (list.some(x => x.o) ? 'ol' : 'ul') + '>' + list.map(x => {
+
+          let t = inline(x.t)
+
+            .replace(/^\[ \]\s*/, '<input type="checkbox" disabled> ')
+
+            .replace(/^\[[xX]\]\s*/, '<input type="checkbox" checked disabled> ');
+
+          let s = '<li>' + t;
+
+          if (x.sub.length) s += renderItems(x.sub.map(y => ({ t: y, o: false, sub: [] })));
+
+          return s + '</li>';
+
+        }).join('') + '</' + (list.some(x => x.o) ? 'ol' : 'ul') + '>';
+
+      out.push(renderItems(items)); continue;
+
+    }
+
+
+
+    // Paragraphe
+
+    const para = [];
+
+    while (i < lines.length && !/^\s*$/.test(lines[i]) && !blockStart(lines[i], i)) { para.push(lines[i]); i++; }
+
+    if (para.length) out.push('<p>' + inline(para.join('\n')).replace(/\n/g, '<br>') + '</p>');
+
+    else i++;
+
+  }
+
+  return out.join('\n');
+
+}
+
+
+
+/* ══════════════ Aperçu ══════════════ */
+
+
+
+const PREVIEW_CSS = `
+
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:#1f2328;background:#fff;margin:0;padding:28px}
+
+.md{max-width:920px;margin:0 auto;line-height:1.65;font-size:16px;word-wrap:break-word}
+
+h1{font-size:2em;border-bottom:1px solid #d1d9e0;padding-bottom:.3em;margin:.67em 0}
+
+h2{font-size:1.5em;border-bottom:1px solid #d1d9e0;padding-bottom:.3em;margin:1em 0 .6em}
+
+h3{font-size:1.25em;margin:1em 0 .5em}
+
+h4{font-size:1em;margin:.8em 0 .4em}h5{font-size:.875em;margin:.8em 0 .4em}h6{font-size:.85em;color:#59636e;margin:.8em 0 .4em}
+
+a{color:#0969da;text-decoration:none}a:hover{text-decoration:underline}
+
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:85%;background:#eff1f3;padding:.2em .4em;border-radius:6px}
+
+pre.cb{background:#0d1117;color:#e6edf3;padding:16px;border-radius:10px;overflow:auto;line-height:1.55;margin:.8em 0}
+
+pre.cb code{background:transparent;padding:0;color:inherit;font-size:13px}
+
+blockquote{margin:0;padding:0 1em;color:#59636e;border-left:.25em solid #d1d9e0}
+
+blockquote p{margin:.4em 0}
+
+.tw{overflow-x:auto}
+
+table{border-collapse:collapse;width:100%;margin:.8em 0}
+
+th,td{border:1px solid #d1d9e0;padding:8px 12px;text-align:left}
+
+th{background:#f6f8fa;font-weight:600}
+
+tbody tr:nth-child(even){background:#fafbfc}
+
+img{max-width:100%;border-radius:8px}
+
+hr{border:none;border-top:1px solid #d1d9e0;margin:1.5em 0}
+
+ul,ol{padding-left:2em;margin:.6em 0}li{margin:.25em 0}
+
+li:has(>input[type=checkbox]){list-style:none;margin-left:-1.5em}
+
+input[type=checkbox]{accent-color:#0969da;margin-right:.45em;transform:translateY(1px)}
+
+del{color:#59636e}
+
+p{margin:.6em 0}
+
+`;
+
+
+
+function buildPreviewDoc(){
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' + PREVIEW_CSS +
+
+    '</style></head><body><article class="md">' + renderMarkdown(editor.value) + '</article></body></html>';
+
+}
+
+
+
+function schedulePreview(){
+
+  if (!state.live) return;
+
+  clearTimeout(state.previewTimer);
+
+  state.previewTimer = setTimeout(refreshPreview, 250);
+
+}
+
+
+
+function refreshPreview(){
+
+  const max = editor.scrollHeight - editor.clientHeight;
+
+  const ratio = max > 0 ? editor.scrollTop / max : 0;
+
+  frame.onload = () => {
+
+    try {
+
+      const d = frame.contentDocument.documentElement;
+
+      d.scrollTop = ratio * (d.scrollHeight - d.clientHeight);
+
+    } catch (e) {}
+
+  };
+
+  frame.srcdoc = buildPreviewDoc();
+
+}
+
+
+
+$('live-toggle').addEventListener('change', e => {
+
+  state.live = e.target.checked;
+
+  if (state.live) refreshPreview();
+
+});
+
+
+
+/* ══════════════ Modes / thème / export ══════════════ */
+
+
+
+function setMode(mode){
+
+  document.body.classList.remove('mode-split', 'mode-edit', 'mode-preview');
+
+  document.body.classList.add('mode-' + mode);
+
+  if (mode !== 'edit') refreshPreview();
+
+}
+
+
+
+function toggleTheme(){ document.body.classList.toggle('light'); }
+
+
+
+function exportHtml(){
+
+  if (!editor.value.trim()) { toast('Rien à exporter', 'error'); return; }
+
+  const name = (state.current || 'document').replace(/\.md$/i, '') + '.html';
+
+  const blob = new Blob([buildPreviewDoc()], { type: 'text/html;charset=utf-8' });
+
+  const a = document.createElement('a');
+
+  a.href = URL.createObjectURL(blob);
+
+  a.download = name;
+
+  a.click();
+
+  toast('⬇ HTML exporté : ' + name, 'ok');
+
+}
+
+
+
+function printPreview(){
+
+  const w = window.open('', '_blank');
+
+  if (!w) { toast('Popup bloquée par le navigateur', 'error'); return; }
+
+  w.document.write(buildPreviewDoc());
+
+  w.document.close();
+
+  w.focus();
+
+  setTimeout(() => w.print(), 500);
+
+}
+
+
+
+/* ══════════════ Modèle README par défaut ══════════════ */
+
+
+
+function defaultReadme(){
+
+  return '# 🚀 Mon Projet\n\nUne courte description qui donne envie.\n\n## ✨ Fonctionnalités\n\n- [x] Fonctionne out of the box\n- [ ] Prochaine feature\n- [ ] Et une autre\n\n## 🛠 Installation\n\n```bash\ngit clone https://github.com/user/repo.git\ncd repo\nnpm install\n```\n\n## 📖 Usage\n\n| Commande | Description |\n| --- | --- |\n| `npm start` | Lance le serveur |\n| `npm test` | Lance les tests |\n\n## 📸 Aperçu\n\n![capture](https://via.placeholder.com/640x320)\n\n## 📝 Licence\n\nMIT — libre d\u2019utilisation.\n';
+
+}
+
+
+
+/* ══════════════ Événements ══════════════ */
+
+
+
+editor.addEventListener('input', onEdit);
+
+editor.addEventListener('scroll', () => { gutter.scrollTop = editor.scrollTop; });
+
+editor.addEventListener('keyup', updateCursor);
+
+editor.addEventListener('click', updateCursor);
+
+editor.addEventListener('keydown', e => {
+
+  if (e.key === 'Tab') { e.preventDefault(); insert('  '); }
+
+});
+
+
+
+editor.addEventListener('dragover', e => e.preventDefault());
+
+editor.addEventListener('drop', e => {
+
+  e.preventDefault();
+
+  const f = e.dataTransfer.files[0];
+
+  if (!f) return;
+
+  const r = new FileReader();
+
+  r.onload = () => {
+
+    if (state.dirty && !confirm('Remplacer le contenu actuel ?')) return;
+
+    editor.value = r.result; state.current = f.name; onEdit(); refreshPreview();
+
+  };
+
+  r.readAsText(f);
+
+});
+
+
+
+document.addEventListener('keydown', e => {
+
+  const mod = e.ctrlKey || e.metaKey;
+
+  if (!mod) return;
+
+  const k = e.key.toLowerCase();
+
+  if (k === 's') { e.preventDefault(); saveFile(e.shiftKey); }
+
+  else if (k === 'b') { e.preventDefault(); actions.bold(); }
+
+  else if (k === 'i') { e.preventDefault(); actions.italic(); }
+
+  else if (k === 'k') { e.preventDefault(); actions.link(); }
+
+});
+
+
+
+window.addEventListener('beforeunload', e => {
+
+  if (state.dirty) { e.preventDefault(); e.returnValue = ''; }
+
+});
+
+
+
+/* ══════════════ Init ══════════════ */
+
+
+
+(async function init(){
+
+  await loadFiles();
+
+  const params = new URLSearchParams(location.search);
+
+  const f = params.get('file');
+
+  const first = state.files.find(x => !x.is_dir && !x.name.startsWith('.'));
+
+  if (f) openFile(f);
+
+  else if (first) openFile(first.path);
+
+  else {
+
+    editor.value = defaultReadme();
+
+    state.savedContent = editor.value;
+
+    updateSaved(); onEdit();
+
+  }
+
+  refreshPreview();
+
+})();
+
+</script>
+
+</body>
+
+</html>
+
+"""
+
+
+
+# ═══════════════════════════════════════════════════════════════════
+
+# SERVEUR
+
+# ═══════════════════════════════════════════════════════════════════
+
+
+
+SKIP_DIRS = ("node_modules", ".git", "__pycache__", ".venv", ".idea", ".vscode")
+
+
+
+def safe_path(rel):
+
+    """Bloque la traversée de dossiers."""
+
+    if not rel or rel.startswith("/") or ".." in rel.split("/"):
+
+        return None
+
+    try:
+
+        target = (WORKSPACE / rel).resolve()
+
+        target.relative_to(WORKSPACE.resolve())
+
+        return target
+
+    except (ValueError, OSError):
+
+        return None
+
+
+
+def get_files():
+
+    files = []
+
+    try:
+
+        for item in sorted(WORKSPACE.rglob("*")):
+
+            if any(p in item.parts for p in SKIP_DIRS):
+
+                continue
+
+            rel = str(item.relative_to(WORKSPACE))
+
+            if rel.startswith("."):
+
+                continue
+
+            files.append({"name": item.name, "path": rel, "is_dir": item.is_dir()})
+
+    except Exception:
+
+        pass
+
+    return files
+
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+
+    def log_message(self, *a):
+
+        pass
+
+
+
+    def _json(self, code, data):
+
+        try:
+
+            body = json.dumps(data, ensure_ascii=False, default=str).encode("utf-8")
+
+            self.send_response(code)
+
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+
+            self.send_header("Content-Length", str(len(body)))
+
+            self.send_header("Access-Control-Allow-Origin", "*")
+
+            self.end_headers()
+
+            self.wfile.write(body)
+
+        except Exception:
+
+            pass
+
+
+
+    def _html(self, html):
+
+        try:
+
+            body = html.encode("utf-8")
+
+            self.send_response(200)
+
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+
+            self.send_header("Content-Length", str(len(body)))
+
+            self.end_headers()
+
+            self.wfile.write(body)
+
+        except Exception:
+
+            pass
+
+
+
+    def _read_json(self):
+
+        try:
+
+            n = int(self.headers.get("Content-Length", "0"))
+
+            return json.loads(self.rfile.read(n).decode()) if n else {}
+
+        except Exception:
+
+            return {}
+
+
+
+    def do_GET(self):
+
+        parsed = urllib.parse.urlparse(self.path)
+
+        path = parsed.path
+
+        qs = urllib.parse.parse_qs(parsed.query)
+
+
+
+        if path in ("/", "/index.html"):
+
+            html = (HTML_PAGE
+
+                    .replace("__PORT__", str(PORT))
+
+                    .replace("__WORKSPACE__", str(WORKSPACE)))
+
+            self._html(html)
+
+            return
+
+
+
+        if path == "/api/files":
+
+            self._json(200, {"files": get_files()})
+
+            return
+
+
+
+        if path == "/api/read":
+
+            rel = qs.get("path", [""])[0]
+
+            target = safe_path(rel)
+
+            if not target or not target.exists() or target.is_dir():
+
+                self._json(404, {"error": "not_found"})
+
+                return
+
+            try:
+
+                content = target.read_text(encoding="utf-8", errors="replace")
+
+                self._json(200, {"path": rel, "content": content, "size": target.stat().st_size})
+
+            except Exception as e:
+
+                self._json(500, {"error": str(e)})
+
+            return
+
+
+
+        if path == "/health":
+
+            self._json(200, {"ok": True, "version": VERSION, "port": PORT,
+
+                             "workspace": str(WORKSPACE)})
+
+            return
+
+
+
+        self._json(404, {"error": "not_found"})
+
+
+
+    def do_POST(self):
+
+        path = urllib.parse.urlparse(self.path).path
+
+        body = self._read_json()
+
+
+
+        if path == "/api/save":
+
+            rel = body.get("path", "")
+
+            target = safe_path(rel)
+
+            if not target:
+
+                self._json(400, {"error": "invalid_path"})
+
+                return
+
+            try:
+
+                target.parent.mkdir(parents=True, exist_ok=True)
+
+                target.write_text(body.get("content", ""), encoding="utf-8")
+
+                self._json(200, {"ok": True, "path": rel})
+
+            except Exception as e:
+
+                self._json(500, {"error": str(e)})
+
+            return
+
+
+
+        if path == "/api/folder":
+
+            rel = body.get("path", "")
+
+            target = safe_path(rel)
+
+            if not target:
+
+                self._json(400, {"error": "invalid_path"})
+
+                return
+
+            try:
+
+                target.mkdir(parents=True, exist_ok=True)
+
+                self._json(200, {"ok": True})
+
+            except Exception as e:
+
+                self._json(500, {"error": str(e)})
+
+            return
+
+
+
+        if path == "/api/delete":
+
+            rel = body.get("path", "")
+
+            target = safe_path(rel)
+
+            if not target or not target.exists():
+
+                self._json(404, {"error": "not_found"})
+
+                return
+
+            try:
+
+                if target.is_dir():
+
+                    shutil.rmtree(target)
+
+                else:
+
+                    target.unlink()
+
+                self._json(200, {"ok": True})
+
+            except Exception as e:
+
+                self._json(500, {"error": str(e)})
+
+            return
+
+
+
+        self._json(404, {"error": "not_found"})
+
+
+
+class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
+
+    daemon_threads = True
+
+    allow_reuse_address = True
+
+
+
+def main():
+
+    bar = "=" * 60
+
+    print()
+
+    print(bar)
+
+    print(f"  📝 MD STUDIO v{VERSION}")
+
+    print(bar)
+
+    print(f"  Port      : {PORT}")
+
+    print(f"  Local     : http://{HOST}:{PORT}/")
+
+    print(f"  Workspace : {WORKSPACE}")
+
+    print()
+
+    print("  Fonctionnalités :")
+
+    print("    - Éditeur Markdown avec numéros de ligne")
+
+    print("    - Aperçu GitHub-style en direct (scroll synchronisé)")
+
+    print("    - Toolbar : gras, titres, listes, tâches, tableaux, liens…")
+
+    print("    - Sommaire automatique (📑)")
+
+    print("    - Export HTML + impression")
+
+    print("    - Thème sombre / clair")
+
+    print("    - Brouillon local anti-perte (localStorage)")
+
+    print()
+
+    print("  Ctrl+C pour arrêter")
+
+    print()
+
+    try:
+
+        with Server((HOST, PORT), Handler) as httpd:
+
+            httpd.serve_forever()
+
+    except KeyboardInterrupt:
+
+        print("\n  Arrêté.")
+
+    except OSError as e:
+
+        print(f"  Erreur port {PORT} : {e}")
+
+
+
+if __name__ == "__main__":
+
+    main()
