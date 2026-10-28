@@ -1,0 +1,466 @@
+cd /home/z/my-project && python3 -c "import ast; ast.parse(open('scripts/devquest_engine.py').read()); print('✓ syntaxe OK')" # Test in a sandboxed fake repo rm -rf /tmp/devquest-test mkdir -p /tmp/devquest-test cd /tmp/devquest-test git init -q git config user.name "Test DevQuest" git config user.email "test@devquest.local" # Initial commit (5 lines, 1 file) cat > hello.py << 'EOF' def hello(): print("Hello, World!") hello() EOF git add hello.py git commit -qm "init: hello.py" # Second commit (add more lines) cat > hello.py << 'EOF' def hello(name="World"): print(f"Hello, {name}!") def goodbye(): print("Bye!") hello() hello("Alice") goodbye() EOF git add hello.py git commit -qm "feat: hello + goodbye" # Add tests + readme cat > test_hello.py << 'EOF' def test_hello(): assert True EOF cat > README.md << 'EOF' # Test Project This is a test README used to validate Nexus DevQuest XP engine. It needs to be at least 1KB to trigger the Doc Master achievement. Adding more lines here. Adding more. Adding more. Adding more. Adding more. Adding more. Adding more. Adding more. Adding more. Adding more. Adding more. Adding more. Adding more. Adding more. EOF git add test_hello.py README.md git commit -qm "test: add tests + readme" # Get the before/after for last commit LAST_COMMIT=$(git rev-parse HEAD~1) HEAD_COMMIT=$(git rev-parse HEAD) echo "BEFORE=$LAST_COMMIT" echo "AFTER=$HEAD_COMMIT" # Run engine simulating the push cd /tmp/devquest-test BEFORE=$LAST_COMMIT AFTER=$HEAD_COMMIT ACTOR="Aissa Mohammedi (DGK)" REPOSITORY="Aissamohammed188/devquest-test" \ GITHUB_WORKSPACE=/tmp/devquest-test \ python3 /home/z/my-project/scripts/devquest_engine.py echo "" echo "--- generated artifacts ---" ls -la .devquest/ badges/ README-devquest.md echo "" echo "--- badges/level.svg (first 5 lines) ---" head -5 badges/level.svg echo "" echo "--- .devquest/state.json ---" cat .devquest/state.json | python3 -m json.tool | head -40 echo "" echo "--- history.jsonl ---" cat .devquest/history.jsonl echo "" echo "--- README-devquest.md (first 60 lines) ---" head -60 README-devquest.md echo "" echo "--- run again to simulate level-up via bigger push ---" # Add a big file python3 -c "print('x = 1\n' * 200)" > big.py git add big.py git commit -qm "feat: big file" LAST_COMMIT=$(git rev-parse HEAD~1) HEAD_COMMIT=$(git rev-parse HEAD) BEFORE=$LAST_COMMIT AFTER=$HEAD_COMMIT ACTOR="Aissa Mohammedi (DGK)" REPOSITORY="Aissamohammed188/devquest-test" \ GITHUB_WORKSPACE=/tmp/devquest-test \ python3 /home/z/my-project/scripts/devquest_engine.py echo "" echo "--- state after 2nd push ---" cat .devquest/state.json | python3 -c "import sys,json; s=json.load(sys.stdin); print(f'XP: {s[\"xp\"]}'); print(f'Niveau: {s[\"level\"]} ({s[\"title\"]})'); print(f'Commits: {s[\"total_commits\"]}'); print(f'HP: {s[\"total_insertions\"]}'); print(f'Achievements: {s[\"achievements\"]}'); print(f'Langages: {list(s[\"languages\"].keys())}')"
+✓ syntaxe OK
+BEFORE=404cc3178898652cafa35e3d7df95d4558226d49
+AFTER=47b5aec58740e085ced580dc163b93af1103ab4d
+╔══════════════════════════════════════════════════════════════╗
+║  ⚛ NEXUS DEVQUEST — push résolu                                    ║
+╠══════════════════════════════════════════════════════════════╣
+║  Acteur      : Aissa Mohammedi (DGK)                         ║
+║  Repo        : Aissamohammed188/devquest-test                ║
+║  XP gagnée   : 18.0                                          ║
+║  Stats       : +9 / -0 / 2 fichiers / 1 commits
+║  Niveau      : 1 → 1 (Novice)
+║  XP total    : 18.0
+║  Progression : 18.0% vers niveau 2
+║  Achievement : 2 débloqué(s)
+║    · 🌱 First Blood
+║    · 🦉 Night Owl
+║  Quêtes      : 3 active(s)
+║    · 🌍 Polyglot — 40.0% (2/5 langages)
+║    · ⭐ Next Level — 18.0% (18.0/100 XP)
+║    · 📚 Doc Scribe — 16.7% (341/2048 octets)
+╚══════════════════════════════════════════════════════════════╝
+
+--- generated artifacts ---
+-rw-rw-r-- 1 z z 2767 Oct 28 02:06 README-devquest.md
+
+.devquest/:
+total 16
+drwxrwxr-x 2 z z 4096 Oct 28 02:06 .
+drwxrwxr-x 5 z z 4096 Oct 28 02:06 ..
+-rw-rw-r-- 1 z z  174 Oct 28 02:06 history.jsonl
+-rw-rw-r-- 1 z z  589 Oct 28 02:06 state.json
+
+badges/:
+total 20
+drwxrwxr-x 2 z z 4096 Oct 28 02:06 .
+drwxrwxr-x 5 z z 4096 Oct 28 02:06 ..
+-rw-rw-r-- 1 z z  692 Oct 28 02:06 level.svg
+-rw-rw-r-- 1 z z  699 Oct 28 02:06 title.svg
+-rw-rw-r-- 1 z z  478 Oct 28 02:06 xp.svg
+
+--- badges/level.svg (first 5 lines) ---
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="28" role="img">
+<rect width="100" height="28" rx="4" fill="#1a1a1a"/>
+<rect x="35" width="65" height="28" rx="4" fill="#00f0ff" style="animation: pulse 2s ease-in-out infinite"/>
+<text x="17" y="18" fill="#fff" font-family="-apple-system,Segoe UI,Ubuntu,sans-serif"
+      font-size="11" font-weight="700" text-anchor="middle">LVL</text>
+
+--- .devquest/state.json ---
+{
+    "version": "1.0.0",
+    "actor": "Aissa Mohammedi (DGK)",
+    "repo": "Aissamohammed188/devquest-test",
+    "xp": 18.0,
+    "level": 1,
+    "title": "Novice",
+    "total_commits": 3,
+    "total_insertions": 9,
+    "total_deletions": 0,
+    "total_files_touched": 2,
+    "achievements": [
+        "first_commit",
+        "night_owl"
+    ],
+    "languages": {
+        ".md": 341,
+        ".py": 156
+    },
+    "streak_days": 0,
+    "last_push": "2026-10-28T02:06:02.512264+00:00",
+    "started_at": "2026-10-28T02:06:02.512252+00:00",
+    "history_levels": [],
+    "test_count": 1,
+    "readme_size": 341,
+    "last_hour": 2,
+    "last_dow": 2
+}
+
+--- history.jsonl ---
+{"type": "push", "at": "2026-10-28T02:06:02.515291+00:00", "gained_xp": 18.0, "stats": {"insertions": 9, "deletions": 0, "files_touched": 2, "commits_count": 1}, "level": 1}
+
+--- README-devquest.md (first 60 lines) ---
+# ⚛ Nexus DevQuest — Fiche de personnage
+
+> *"Code is the new XP. Push is the new quest."*
+
+![Level Badge](badges/level.svg)
+![Title Badge](badges/title.svg)
+![XP Bar](badges/xp.svg)
+
+---
+
+## 🧙 Joueur
+
+| Attribut | Valeur |
+|----------|--------|
+| **Nom** | `Aissa Mohammedi (DGK)` |
+| **Repo** | `Aissamohammed188/devquest-test` |
+| **Niveau** | `1` |
+| **Titre** | `Novice` |
+| **XP total** | `18.0` |
+| **Commencé le** | `2026-10-28T02:06:02.512252+00:00` |
+| **Dernier push** | `2026-10-28T02:06:02.512264+00:00` |
+
+---
+
+## 🎭 Avatar
+
+```
+
+    ⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⣤⣤⣤⣄⡀⠀⠀⠀⠀
+    ⠀⠀⠀⠀⠀⠀⠀⢠⣶⠋⠉⠀⠀⠉⠙⣦⡀⠀⠀⠀
+    ⠀⠀⠀⠀⠀⠀⠀⣼⡇⠀⠀⣀⣀⠀⠀⢸⣷⠀⠀⠀
+    ⠀⠀⠀⠀⠀⠀⠀⣿⣇⠀⢠⣿⣿⡄⠀⣸⣿⠀⠀⠀
+    ⠀⠀⠀⠀⠀⠀⠀⠈⠙⠇⣼⣿⣿⣷⠸⠋⠁⠀⠀⠀
+    ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠀⠀⠀⠀⠀⠀
+
+```
+
+---
+
+## 📊 Stats de combat
+
+| Stat | Valeur | Signification |
+|------|--------|---------------|
+| ❤️ HP | `9` | Lignes de code ajoutées (insertions cumulées) |
+| 💎 MP | `1` | Fichiers de test (`test_*` / `*_test.*`) |
+| ⚔️ ATQ | `3` | Commits cumulés |
+| 🛡️ DEF | `2` | Langages différents utilisés |
+| 🌟 NIV | `1` | Niveau actuel |
+
+---
+
+## 🗺️ Langages
+
+| Extension | Volume | % |
+|-----------|--------|---|
+| .md | 341 | 68.6% |
+| .py | 156 | 31.4% |
+
+---
+
+
+--- run again to simulate level-up via bigger push ---
+╔══════════════════════════════════════════════════════════════╗
+║  ⚛ NEXUS DEVQUEST — push résolu                                    ║
+╠══════════════════════════════════════════════════════════════╣
+║  Acteur      : Aissa Mohammedi (DGK)                         ║
+║  Repo        : Aissamohammed188/devquest-test                ║
+║  XP gagnée   : 208.0                                         ║
+║  Stats       : +201 / -0 / 1 fichiers / 1 commits
+║  Niveau      : 1 → 2 (Apprenti)
+║  XP total    : 226.0
+║  Progression : 42.0% vers niveau 3
+║  Quêtes      : 3 active(s)
+║    · ⭐ Next Level — 56.5% (226.0/400 XP)
+║    · 🌍 Polyglot — 40.0% (2/5 langages)
+║    · 📚 Doc Scribe — 16.7% (341/2048 octets)
+╚══════════════════════════════════════════════════════════════╝
+
+--- state after 2nd push ---
+XP: 226.0
+Niveau: 2 (Apprenti)
+Commits: 4
+HP: 210
+Achievements: ['first_commit', 'night_owl']
+Langages: ['.py', '.md']
+$ chmod +x /home/z/my-project/scripts/build_nexus_devquest.sh bash /home/z/my-project/scripts/build_nexus_devquest.sh echo "" echo "--- file info ---" ls -la /home/z/my-project/download/nexus-devquest.yml file /home/z/my-project/download/nexus-devquest.yml echo "" echo "--- YAML validation via python ---" python3 -c " import yaml with open('/home/z/my-project/download/nexus-devquest.yml') as f: doc = yaml.safe_load(f) print('✓ YAML valide') print(f' name : {doc[\"name\"]}') print(f' on.push : {doc[\"on\"][\"push\"]}') print(f' on.wd : {doc[\"on\"][\"workflow_dispatch\"]}') print(f' jobs : {list(doc[\"jobs\"].keys())}') print(f' steps : {len(doc[\"jobs\"][\"level-up\"][\"steps\"])}') print(f' step 3 run lines : {len(doc[\"jobs\"][\"level-up\"][\"steps\"][2][\"run\"].splitlines())}') print(f' permissions : {doc[\"permissions\"]}') "
+Command failed with exit_code=1, duration_ms=153.
+Traceback (most recent call last):
+  File "<string>", line 7, in <module>
+KeyError: 'on'
+$ python3 -c " import yaml with open('/home/z/my-project/download/nexus-devquest.yml') as f: doc = yaml.safe_load(f) print('✓ YAML valide') # 'on' becomes True in YAML 1.1 on_key = True if True in doc else 'on' print(f' top keys : {list(doc.keys())}') print(f' on[True].push : {doc[True][\"push\"]}') print(f' on[True].wd : {doc[True].get(\"workflow_dispatch\", False)}') print(f' jobs : {list(doc[\"jobs\"].keys())}') print(f' steps : {len(doc[\"jobs\"][\"level-up\"][\"steps\"])}') print(f' step 3 run lines : {len(doc[\"jobs\"][\"level-up\"][\"steps\"][2][\"run\"].splitlines())}') print(f' permissions : {doc[\"permissions\"]}') print(f' concurrency.group : {doc[\"concurrency\"][\"group\"]}') " echo "" echo "--- file info ---" ls -la /home/z/my-project/download/nexus-devquest.yml wc -lc /home/z/my-project/download/nexus-devquest.yml echo "" echo "--- head ---" head -50 /home/z/my-project/download/nexus-devquest.yml echo "..." echo "--- tail ---" tail -30 /home/z/my-project/download/nexus-devquest.yml
+✓ YAML valide
+  top keys : ['name', True, 'permissions', 'concurrency', 'jobs']
+  on[True].push : {'branches': ['main', 'master']}
+  on[True].wd   : None
+  jobs     : ['level-up']
+  steps    : 5
+  step 3 run lines : 719
+  permissions : {'contents': 'write', 'actions': 'read'}
+  concurrency.group : nexus-devquest-${{ github.workflow }}-${{ github.ref }}
+
+--- file info ---
+-rw-rw-r-- 1 z z 41600 Oct 28 02:08 /home/z/my-project/download/nexus-devquest.yml
+  815 41600 /home/z/my-project/download/nexus-devquest.yml
+
+--- head ---
+# ═════════════════════════════════════════════════════════════════════════════
+# ██╗  ██╗██████╗  ███████╗ ██████╗ ███████╗██╗███████╗██╗   ██╗███████╗██████╗
+# ██║ ██╔╝██╔══██╗██╔════╝██╔═══██╗██╔════╝██║██╔════╝██║   ██║██╔════╝██╔══██╗
+# █████╔╝ ██████╔╝███████╗██║   ██║█████╗  ██║█████╗  ██║   ██║█████╗  ██████╔╝
+# ██╔═██╗ ██╔══██╗╚════██║██║   ██║██╔══╝  ██║██╔══╝  ╚██╗ ██╔╝██╔══╝  ██╔══██╗
+# ██║  ██╗██████╔╝███████║╚██████╔╝██║     ██║███████╗ ╚████╔╝ ███████╗██║  ██║
+# ╚═╝  ╚═╝╚═════╝ ╚══════╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝
+# ═════════════════════════════════════════════════════════════════════════════
+# NEXUS DEVQUEST — workflow GitHub Actions
+# ═════════════════════════════════════════════════════════════════════════════
+# Transforme ton repo en RPG. À chaque push :
+#   1. Calcule XP (lignes + fichiers + commits)
+#   2. Met à jour niveau + titre (Novice → Légende)
+#   3. Génère 3 badges SVG animés (level, title, xp)
+#   4. Génère un avatar ASCII basé sur les langages du repo
+#   5. Génère 3 "quêtes" adaptées à l'état du repo
+#   6. Écrit README-devquest.md (fiche de personnage)
+#   7. Archive chaque niveau dans .devquest/history.jsonl
+#   8. Commit + push automatique (via GITHUB_TOKEN, [skip ci])
+#
+# Stack : YAML pur + Python 3 stdlib (zéro dépendance, zéro pip).
+# Auteur : Aissa Mohammedi (DGK)
+# License: NEXUS-OPEN-3.0
+# ═════════════════════════════════════════════════════════════════════════════
+
+name: Nexus DevQuest
+
+on:
+  push:
+    branches: ain, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # pour commit/push les badges + README
+  actions: read
+
+concurrency:
+  group: nexus-devquest-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  level-up:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (full history for XP calc)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+...
+--- tail ---
+        run: |
+          git config user.name "Nexus DevQuest"
+          git config user.email "devquest@nexus.local"
+          git add .devquest/ badges/ README-devquest.md 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "ℹ No DevQuest changes to commit."
+            exit 0
+          fi
+          git commit -m "⚛ devquest: level up [skip ci]"
+          git push
+
+      - name: Step Summary (visible dans l'onglet Summary)
+        if: always()
+        run: |
+          if [ -f .devquest/state.json ]; then
+            python3 - <<'PYEOF'
+          import json
+          with open(".devquest/state.json") as f:
+              s = json.load(f)
+          print(f"### ⚛ Nexus DevQuest — Niveau {s['level']} ({s['title']})")
+          print("")
+          print(f"**XP** : {s['xp']:,}")
+          print(f"**Achievements débloqués** : {len(s['achievements'])}")
+          print(f"**Commits cumulés** : {s['total_commits']}")
+          print(f"**Langages détectés** : {len(s['languages'])}")
+          print(f"**Fiche de personnage** : \`README-devquest.md\`")
+          PYEOF
+          else
+            echo "⚠ .devquest/state.json absent"
+          fi
+$ python3 -c " with open('/home/z/my-project/download/nexus-devquest.yml', 'r') as f: content = f.read() # Find the branches line for i, line in enumerate(content.splitlines()[:35], 1): if 'branches' in line: print(f'Line {i}: {repr(line)}') # check exact bytes print(f' bytes: {line.encode()}') " echo "" # Also display via cat -A to show all characters echo "--- cat -A around branches line ---" grep -n "branches" /home/z/my-project/download/nexus-devquest.yml | head -3 sed -n '29,35p' /home/z/my-project/download/nexus-devquest.yml | cat -A
+Line 30: '    branches: ain, master]'
+  bytes: b'    branches: ain, master]'
+
+--- cat -A around branches line ---
+30:    branches: ain, master]
+  push:$
+    branches: ain, master]$
+  workflow_dispatch:$
+$
+permissions:$
+  contents: write   # pour commit/push les badges + README$
+  actions: read$
+$ sed -n '30p' /home/z/my-project/download/nexus-devquest.yml | xxd | head -3 echo "" echo "--- compare with what should be there ---" echo " branches: [main, master]" | xxd | head -2
+
+--- compare with what should be there ---
+
+stderr:
+/bin/bash: line 1: xxd: command not found
+/bin/bash: line 4: xxd: command not found
+$ sed -n '30p' /home/z/my-project/download/nexus-devquest.yml | od -c | head -3 echo "" echo "--- the expected ---" echo " branches: [main, master]" | od -c | head -3
+0000000                   b   r   a   n   c   h   e   s   :       [   m
+0000020   a   i   n   ,       m   a   s   t   e   r   ]  \n
+0000035
+
+--- the expected ---
+0000000                   b   r   a   n   c   h   e   s   :       [   m
+0000020   a   i   n   ,       m   a   s   t   e   r   ]  \n
+0000035
+$ which actionlint 2>/dev/null && actionlint -version 2>/dev/null echo "" echo "--- validation summary ---" python3 -c " import yaml with open('/home/z/my-project/download/nexus-devquest.yml') as f: doc = yaml.safe_load(f) jobs = doc['jobs'] lvl = jobs['level-up'] print('✓ YAML structure OK') print(f' jobs.level-up.steps = {len(lvl[\"steps\"])} steps') for i, step in enumerate(lvl['steps']): name = step.get('name', step.get('uses', '(no name)')) print(f' [{i+1}] {name}') print() print('✓ Permissions:') for k, v in doc['permissions'].items(): print(f' {k}: {v}') print() print('✓ Triggers:') print(f' on.push.branches = {doc[True][\"push\"][\"branches\"]}') print(f' on.workflow_dispatch = {doc[True].get(\"workflow_dispatch\", \"(absent)\")}') print() print('✓ Concurrency group:', doc['concurrency']['group']) print('✓ cancel-in-progress:', doc['concurrency']['cancel-in-progress']) print() print('✓ Step 3 (DevQuest Engine) embedded Python:') engine_run = lvl['steps'][2]['run'] lines = engine_run.splitlines() print(f' total lines in run block: {len(lines)}') # Find python content in_py = False py_lines = 0 for line in lines: if 'PYEOF' in line and not in_py: in_py = True continue elif 'PYEOF' in line and in_py: in_py = False continue if in_py: py_lines += 1 print(f' python lines (between PYEOF markers): {py_lines}') "
+
+--- validation summary ---
+✓ YAML structure OK
+  jobs.level-up.steps = 5 steps
+    [1] Checkout (full history for XP calc)
+    [2] Setup Python 3.11
+    [3] DevQuest Engine — XP + badges + quêtes + README
+    [4] Commit & push artifacts (GITHUB_TOKEN, no re-trigger)
+    [5] Step Summary (visible dans l'onglet Summary)
+
+✓ Permissions:
+    contents: write
+    actions: read
+
+✓ Triggers:
+    on.push.branches = ['main', 'master']
+    on.workflow_dispatch = None
+
+✓ Concurrency group: nexus-devquest-${{ github.workflow }}-${{ github.ref }}
+✓ cancel-in-progress: False
+
+✓ Step 3 (DevQuest Engine) embedded Python:
+    total lines in run block: 719
+    python lines (between PYEOF markers): 717
+$ # Extract the embedded Python from the YAML file (between PYEOF markers) python3 - <<'EOF' with open('/home/z/my-project/download/nexus-devquest.yml') as f: lines = f.readlines() # Find the DevQuest Engine step in_engine = False in_heredoc = False py_lines = [] for line in lines: if "DevQuest Engine" in line: in_engine = True continue if not in_engine: continue if "PYEOF" in line and not in_heredoc: in_heredoc = True continue elif "PYEOF" in line and in_heredoc: break elif in_heredoc: # Strip the 10-space YAML indent py_lines.append(line[10:] if line.startswith(' ') else line) # Write extracted engine to a temp file for testing with open('/tmp/extracted_engine.py', 'w') as f: f.writelines(py_lines) print(f"✓ extracted {len(py_lines)} lines to /tmp/extracted_engine.py") import ast ast.parse(''.join(py_lines)) print(f"✓ extracted Python syntaxe OK") EOF echo "" echo "--- test the extracted engine on a fresh fake repo ---" rm -rf /tmp/devquest-e2e mkdir -p /tmp/devquest-e2e cd /tmp/devquest-e2e git init -q git config user.name "Test" git config user.email "test@local" # Initial commit echo "# DevQuest E2E Test" > README.md echo "def hello(): pass" > main.py git add . && git commit -qm "init" # Second commit (push simulation) echo "def hello(): print('hi')" > main.py echo "def test_hello(): pass" > test_main.py cat > README.md << 'RDME' # DevQuest E2E Test This README needs to be at least 1KB to trigger the Doc Master achievement. Adding more text here to reach that threshold. Adding more text here to reach that threshold. Adding more text here to reach that threshold. Adding more text here to reach that threshold. Adding more text here to reach that threshold. Adding more text here to reach that threshold. Adding more text here to reach that threshold. RDME git add . && git commit -qm "feat: hello + tests + readme" BEFORE=$(git rev-parse HEAD~1) AFTER=$(git rev-parse HEAD) echo "Running engine..." BEFORE=$BEFORE AFTER=$AFTER \ ACTOR="Aissamohammed188" REPOSITORY="Aissamohammed188/devquest-e2e" \ GITHUB_WORKSPACE=/tmp/devquest-e2e \ python3 /tmp/extracted_engine.py echo "" echo "--- generated artifacts ---" ls -la .devquest/ badges/ README-devquest.md echo "" echo "--- badges ---" head -2 badges/level.svg head -2 badges/title.svg head -2 badges/xp.svg echo "" echo "--- state.json ---" python3 -c " import json s = json.load(open('.devquest/state.json')) print(f'XP: {s[\"xp\"]:,.0f}') print(f'Niveau: {s[\"level\"]} ({s[\"title\"]})') print(f'Commits cumulés: {s[\"total_commits\"]}') print(f'HP (insertions): {s[\"total_insertions\"]}') print(f'Achievements: {s[\"achievements\"]}') print(f'Langages: {list(s[\"languages\"].keys())}') print(f'Test count: {s.get(\"test_count\", 0)}') print(f'Readme size: {s.get(\"readme_size\", 0)}') " echo "" echo "--- README-devquest.md (last 30 lines) ---" tail -30 README-devquest.md
+✓ extracted 717 lines to /tmp/extracted_engine.py
+✓ extracted Python syntaxe OK
+
+--- test the extracted engine on a fresh fake repo ---
+Running engine...
+╔══════════════════════════════════════════════════════════════╗
+║  ⚛ NEXUS DEVQUEST — push résolu                                    ║
+╠══════════════════════════════════════════════════════════════╣
+║  Acteur      : Aissamohammed188                              ║
+║  Repo        : Aissamohammed188/devquest-e2e                 ║
+║  XP gagnée   : 22.5                                          ║
+║  Stats       : +11 / -1 / 3 fichiers / 1 commits
+║  Niveau      : 1 → 1 (Novice)
+║  XP total    : 22.5
+║  Progression : 22.5% vers niveau 2
+║  Achievement : 2 débloqué(s)
+║    · 🌱 First Blood
+║    · 🦉 Night Owl
+║  Quêtes      : 3 active(s)
+║    · 🌍 Polyglot — 40.0% (2/5 langages)
+║    · ⭐ Next Level — 22.5% (22.5/100 XP)
+║    · 📚 Doc Scribe — 20.8% (426/2048 octets)
+╚══════════════════════════════════════════════════════════════╝
+
+--- generated artifacts ---
+-rw-rw-r-- 1 z z 2761 Oct 28 02:09 README-devquest.md
+
+.devquest/:
+total 16
+drwxrwxr-x 2 z z 4096 Oct 28 02:09 .
+drwxrwxr-x 5 z z 4096 Oct 28 02:09 ..
+-rw-rw-r-- 1 z z  175 Oct 28 02:09 history.jsonl
+-rw-rw-r-- 1 z z  583 Oct 28 02:09 state.json
+
+badges/:
+total 20
+drwxrwxr-x 2 z z 4096 Oct 28 02:09 .
+drwxrwxr-x 5 z z 4096 Oct 28 02:09 ..
+-rw-rw-r-- 1 z z  692 Oct 28 02:09 level.svg
+-rw-rw-r-- 1 z z  699 Oct 28 02:09 title.svg
+-rw-rw-r-- 1 z z  478 Oct 28 02:09 xp.svg
+
+--- badges ---
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="28" role="img">
+<rect width="100" height="28" rx="4" fill="#1a1a1a"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="28" role="img">
+<rect width="100" height="28" rx="4" fill="#1a1a1a"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="28" role="img">
+<rect width="200" height="28" rx="14" fill="#1a1a1a" stroke="#27272a"/>
+
+--- state.json ---
+XP: 22
+Niveau: 1 (Novice)
+Commits cumulés: 2
+HP (insertions): 11
+Achievements: ['first_commit', 'night_owl']
+Langages: ['.md', '.py']
+Test count: 1
+Readme size: 426
+
+--- README-devquest.md (last 30 lines) ---
+
+---
+
+## 🏆 Achievements
+
+- 🌱 First Blood — Premier commit
+- 🦉 Night Owl — Push entre 23h et 5h
+
+---
+
+## 📜 Historique des montées de niveau
+
+_Premier push de DevQuest — ton histoire commence ici._
+
+---
+
+## ⚛ Manifesto
+
+> *"If you can't ship it in one file, you don't understand it."*
+
+Chaque push te rapproche de la **Légende**. Le workflow `nexus-devquest.yml` calcule ton XP, génère les badges SVG animés et réécrit ce fichier à chaque commit. **100% stdlib, zéro dépendance, 100% local**.
+
+- 🔁 Plus tu push, plus tu montes en niveau
+- 🎯 Les quêtes s'adaptent à ton état de repo
+- 🏆 Les achievements se débloquent automatiquement
+- 📈 Ton README principal peut afficher ton badge niveau en live
+
+---
+
+_Généré automatiquement par **Nexus DevQuest v1.0.0** · 2026-10-28T02:09:30_
+$ cd /tmp/devquest-e2e # Make a big push to trigger level-up python3 -c "for i in range(150): print(f'x{i} = {i}')" > big.py git add big.py git commit -qm "feat: big push for XP" BEFORE=$(git rev-parse HEAD~1) AFTER=$(git rev-parse HEAD) echo "=== 2nd push ===" BEFORE=$BEFORE AFTER=$AFTER \ ACTOR="Aissamohammed188" REPOSITORY="Aissamohammed188/devquest-e2e" \ GITHUB_WORKSPACE=/tmp/devquest-e2e \ python3 /tmp/extracted_engine.py 2>&1 | head -20 echo "" echo "=== state after level-up ===" python3 -c " import json s = json.load(open('.devquest/state.json')) print(f'XP: {s[\"xp\"]:,.0f}') print(f'Niveau: {s[\"level\"]} ({s[\"title\"]})') print(f'Achievements: {s[\"achievements\"]}') print(f'Historique niveaux: {len(s[\"history_levels\"])}') if s['history_levels']: h = s['history_levels'][-1] print(f' Dernier level-up: niveau {h[\"level\"]} à {h[\"at\"]}') " echo "" echo "=== 3rd push to hit level 3 ===" python3 -c "for i in range(300): print(f'y{i} = {i}')" > bigger.py git add bigger.py git commit -qm "feat: huge push" BEFORE=$(git rev-parse HEAD~1) AFTER=$(git rev-parse HEAD) BEFORE=$BEFORE AFTER=$AFTER \ ACTOR="Aissamohammed188" REPOSITORY="Aissamohammed188/devquest-e2e" \ GITHUB_WORKSPACE=/tmp/devquest-e2e \ python3 /tmp/extracted_engine.py 2>&1 | head -15 echo "" echo "=== final state ===" python3 -c " import json s = json.load(open('.devquest/state.json')) print(f'XP: {s[\"xp\"]:,.0f}') print(f'Niveau: {s[\"level\"]} ({s[\"title\"]})') print(f'Achievements: {s[\"achievements\"]}') print(f'Historique niveaux: {len(s[\"history_levels\"])}') " # Cleanup rm -rf /tmp/devquest-e2e /tmp/devquest-test /tmp/extracted_engine.py /tmp/plasma*.log /tmp/slides*.html echo "" echo "✓ cleanup done"
+=== 2nd push ===
+╔══════════════════════════════════════════════════════════════╗
+║  ⚛ NEXUS DEVQUEST — push résolu                                    ║
+╠══════════════════════════════════════════════════════════════╣
+║  Acteur      : Aissamohammed188                              ║
+║  Repo        : Aissamohammed188/devquest-e2e                 ║
+║  XP gagnée   : 157.0                                         ║
+║  Stats       : +150 / -0 / 1 fichiers / 1 commits
+║  Niveau      : 1 → 2 (Apprenti)
+║  XP total    : 179.5
+║  Progression : 26.5% vers niveau 3
+║  Quêtes      : 3 active(s)
+║    · ⭐ Next Level — 44.9% (179.5/400 XP)
+║    · 🌍 Polyglot — 40.0% (2/5 langages)
+║    · 📚 Doc Scribe — 20.8% (426/2048 octets)
+╚══════════════════════════════════════════════════════════════╝
+
+=== state after level-up ===
+XP: 180
+Niveau: 2 (Apprenti)
+Achievements: ['first_commit', 'night_owl']
+Historique niveaux: 1
+  Dernier level-up: niveau 2 à 2026-10-28T02:09:56.035149+00:00
+
+=== 3rd push to hit level 3 ===
+╔══════════════════════════════════════════════════════════════╗
+║  ⚛ NEXUS DEVQUEST — push résolu                                    ║
+╠══════════════════════════════════════════════════════════════╣
+║  Acteur      : Aissamohammed188                              ║
+║  Repo        : Aissamohammed188/devquest-e2e                 ║
+║  XP gagnée   : 307.0                                         ║
+║  Stats       : +300 / -0 / 1 fichiers / 1 commits
+║  Niveau      : 2 → 3 (Apprenti)
+║  XP total    : 486.5
+║  Progression : 17.3% vers niveau 4
+║  Quêtes      : 3 active(s)
+║    · ⭐ Next Level — 54.1% (486.5/900 XP)
+║    · 🌍 Polyglot — 40.0% (2/5 langages)
+║    · 📚 Doc Scribe — 20.8% (426/2048 octets)
+╚══════════════════════════════════════════════════════════════╝
+
+=== final state ===
+XP: 486
+Niveau: 3 (Apprenti)
+Achievements: ['first_commit', 'night_owl']
+Historique niveaux: 2
+
+✓ cleanup done
+$ cat >> /home/z/my-project/worklog.md << 'WLEOF' --- Task ID: 5 Agent: main (Z.ai) Task: Créer un workflow GitHub Actions original et « addictif » qui peut servir à beaucoup de choses dans le développement — idée que l'utilisateur n'aurait jamais pensée. Demande explicite : « yhm d'une action que j'aurai jamais pensé » + « va devenir
