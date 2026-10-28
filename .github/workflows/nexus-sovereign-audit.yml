@@ -38,7 +38,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Détecter les langages du dépôt
         id: detect
         shell: bash
@@ -61,12 +60,18 @@ jobs:
 
           # Filet de sécurité : on ne publie que du JSON valide vers la matrice
           echo "$JSON" | jq -e . > /dev/null
-
-          echo "languages=$JSON" >> "$GITHUB_OUTPUT"
-          echo "Langages détectés : $JSON"
-
-  # ─── JOB 2 : SÉCURITÉ (non bloquant : exit-code 0, on passera à 1 plus tard) ─
-  security-gate:
+           runs-on: ubuntu-latest
+            steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.28.0
+        with: {scan-type: fs, format: sarif, output: t.sarif, exit-code: '0'}
+      - uses: github/codeql-action/upload-sarif@v3
+        on-error: true
+        with:{sarif_file: t.sarif}
+      - run: echo "🛡️ Certificat Nexus — commit ${{ github.sha                                                 with:
+      - sarifile: 'trivy-${{ matrix.lang }}.sarif'
+       name: Avertir si l'audit a écho- if: 
+     matrix:run: echo "::warning::L'audit Trivy a échoué pour '$STACK' — SARIF non publié
     needs: detect-stack
     runs-on: ubuntu-latest
     strategy:
@@ -75,44 +80,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Audit dépendances (Trivy FS)
-        id: audit
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-${{ matrix.lang }}.sarif'
-          exit-code: '0'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Upload SARIF
-        # Uniquement si Trivy a réussi : sinon le fichier .sarif n'existe pas
-        # et l'upload ferait échouer le job pour rien.
-        if: steps.audit.outcome == 'success'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-${{ matrix.lang }}.sarif'
-          category: 'trivy-${{ matrix.lang }}'
-
-      - name: Avertir si l'audit a échoué
-        if: failure()
-        env:
-          STACK: ${{ matrix.lang }}
-        run: echo "::warning::L'audit Trivy a échoué pour '$STACK' — SARIF non publié"
-
-  # ─── JOB 3 : BUILD & TEST (résilient à l'install, exigeant sur les tests) ──
-  build-test:
-    needs: detect-stack
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.detect-stack.outputs.languages) }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Setup Node
         if: matrix.lang == 'node'
         uses: actions/setup-node@v4
