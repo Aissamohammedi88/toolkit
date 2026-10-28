@@ -1,39 +1,20 @@
 #!/usr/bin/env python3
-
 # -*- coding: utf-8 -*-
-
 """
-
 MD STUDIO v1.0.0
-
 Éditeur Markdown professionnel local (style README GitHub, en mieux).
-
 Live preview · Toolbar · Fichiers · Export HTML · Sommaire auto
 
 Localhost uniquement. Port : 9289
-
 """
-
-
-
 import os
-
 import json
-
 import shutil
-
 import http.server
-
 import socketserver
-
 import urllib.parse
-
 from pathlib import Path
-
-
-
 VERSION = "1.0.0"
-
 PORT = int(os.environ.get("MDSTUDIO_PORT", 9289))
 
 HOST = os.environ.get("MDSTUDIO_HOST", "127.0.0.1")
@@ -41,27 +22,15 @@ HOST = os.environ.get("MDSTUDIO_HOST", "127.0.0.1")
 WORKSPACE = Path(os.path.expanduser("~/Documents/md_studio_workspace"))
 
 WORKSPACE.mkdir(parents=True, exist_ok=True)
-
-
-
 # ═══════════════════════════════════════════════════════════════════
 
 # PAGE UNIQUE (éditeur + aperçu + JS)
-
 # ═══════════════════════════════════════════════════════════════════
-
-
-
 HTML_PAGE = r"""<!DOCTYPE html>
-
 <html lang="fr">
-
-<head>
-
+<head
 <meta charset="UTF-8">
-
 <meta name="viewport" content="width=device-width,initial-scale=1">
-
 <title>MD STUDIO — __PORT__</title>
 
 <style>
@@ -83,9 +52,6 @@ HTML_PAGE = r"""<!DOCTYPE html>
 html,body{height:100%;overflow:hidden}
 
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;font-size:14px}
-
-
-
 /* ── Header ── */
 
 .header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
