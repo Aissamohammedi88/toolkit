@@ -1,21 +1,23 @@
-name: "⚡ NEXUS OMEGA - Java Auto-Heal & Deploy"
+name: "⚡ NEXUS OMEGA - Java Auto-Heal & Deploy (2027)"
 
 on:
   push:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  schedule:
-    - cron: '0 0 * * 0' # Maintenance tous les dimanches
-# Sécurité : Lecture seule par défaut
+
+# Principe du moindre privilège
 permissions:
   contents: read
+
 env:
-  JAVA_VERSION: "17"
-  JAVA_DISTRIBUTION: "temurin"
+  # Java 21 LTS est le standard 2027 (Java 17 est en fin de vie)
+  JAVA_VERSION: "21"
+  JAVA_DISTRIBUTION: "temurin" # Eclipse Temurin est le standard open-source
+
 jobs:
   # ============================================================================
-  # JOB 1 : AUTO-REPAIR (Nettoyage et formatage Java)
+  # JOB 1 : AUTO-REPAIR (Nettoyage et formatage)
   # ============================================================================
   auto_repair:
     name: "🔧 Usine de Nettoyage Java"
@@ -25,35 +27,37 @@ jobs:
       pull-requests: write
     outputs:
       changes_made: ${{ steps.check_changes.outputs.changes }}
+
     steps:
       - name: "📥 Checkout Code"
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: "☕ Setup Java"
+      - name: "☕ Setup Java 21 LTS"
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: ${{ env.JAVA_DISTRIBUTION }}
-          # Cache intelligent : n'active le cache que si le fichier de build existe
-          cache: ${{ hashFiles('**/pom.xml', '**/build.gradle', '**/build.gradle.kts') != '' && 'maven' || '' }}
+          # Cache natif intelligent (Maven ou Gradle détecté automatiquement)
+          cache: ${{ hashFiles('**/pom.xml') != '' && 'maven' || hashFiles('**/build.gradle*') != '' && 'gradle' || '' }}
 
-      - name: "🛠️ Install google-java-format"
+      - name: "🛠️ Download Google Java Format (2027 Version)"
         run: |
-          # Téléchargement de l'outil de formatage officiel de Google
-          wget -q https://github.com/google/google-java-format/releases/latest/download/google-java-format-1.22.0-all-deps.jar -O /tmp/gjf.jar
+          # Téléchargement de la dernière version stable de l'outil de formatage
+          curl -sSL -o /tmp/gjf.jar https://github.com/google/google-java-format/releases/download/v1.23.0/google-java-format-1.23.0-all-deps.jar
           chmod +x /tmp/gjf.jar
 
       - name: "🧹 Format Java Code"
         continue-on-error: true
         run: |
-          # VÉRIFICATION STRICTE : On ne formate que s'il y a des fichiers .java
-          if find . -name "*.java" -not -path "*/target/*" -not -path "*/.git/*" | grep -q .; then
-            echo "Formatage des fichiers Java..."
-            find . -name "*.java" -not -path "*/target/*" -not -path "*/.git/*" -exec java -jar /tmp/gjf.jar --replace {} +
+          # Trouve les fichiers .java en excluant les dossiers de build
+          if find . -name "*.java" -not -path "*/target/*" -not -path "*/build/*" -not -path "*/.git/*" | grep -q .; then
+            find . -name "*.java" -not -path "*/target/*" -not -path "*/build/*" -not -path "*/.git/*" \
+              -exec java -jar /tmp/gjf.jar --replace {} +
+            echo "✓ Fichiers Java formatés."
           else
-            echo "Aucun fichier Java trouvé."
+            echo "Aucun fichier Java à formater."
           fi
 
       - name: "📊 Check Changes"
@@ -65,62 +69,50 @@ jobs:
             echo "changes=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: "🚀 Create PR"
+      - name: "🚀 Create PR (Si formatage nécessaire)"
         if: steps.check_changes.outputs.changes == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "⚡ NEXUS OMEGA : Auto-Réparation (Java Format)"
-          title: "🩺 Auto-Réparation : Code Java Formaté"
+          commit-message: "style: auto-format Java code (google-java-format)"
+          title: "🩺 Auto-Réparation : Formatage Java"
           branch: nexus-omega/java-repair-${{ github.run_id }}
           delete-branch: true
 
   # ============================================================================
-  # JOB 2 : BUILD & TEST (Maven / Gradle)
+  # JOB 2 : BUILD & TEST (Maven / Gradle détectés)
   # ============================================================================
   build_and_test:
-    name: "🏗️ Construction et test Souverain"
+    name: "🏗️ Build & Test"
     runs-on: ubuntu-latest
     needs: auto_repair
-    # On lance si le code n'a pas changé (déjà propre) ou si c'est une PR
     if: needs.auto_repair.outputs.changes_made == 'false' || github.event_name == 'pull_request'
 
     steps:
-      - name: "📥 Checkout Code"
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: "☕ Setup Java"
+      - name: "☕ Setup Java 21"
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: ${{ env.JAVA_DISTRIBUTION }}
-          cache: ${{ hashFiles('**/pom.xml') != '' && 'maven' || hashFiles('**/build.gradle') != '' && 'gradle' || '' }}
+          cache: ${{ hashFiles('**/pom.xml') != '' && 'maven' || hashFiles('**/build.gradle*') != '' && 'gradle' || '' }}
 
-      - name: "📦 Install Dependencies & Build (Maven)"
+      # --- MAVEN ---
+      - name: "📦 Build & Test (Maven)"
         if: hashFiles('**/pom.xml') != ''
         run: |
-          echo "Maven détecté. Compilation..."
-          # -B (batch mode), -DskipTests (on teste séparément)
-          mvn -B clean compile
+          mvn -B -ntp clean verify
+          # -ntp : No Transfer Progress (logs propres)
+          # verify : compile + test + package
 
-      - name: "📦 Install Dependencies & Build (Gradle)"
+      # --- GRADLE ---
+      - name: "📦 Build & Test (Gradle)"
         if: hashFiles('**/build.gradle') != '' || hashFiles('**/build.gradle.kts') != ''
         run: |
-          echo "Gradle détecté. Compilation..."
           chmod +x gradlew || true
-          ./gradlew build -x test || gradle build -x test
-
-      - name: "🧪 Run Tests (Maven)"
-        if: hashFiles('**/pom.xml') != ''
-        run: |
-          echo "Exécution des tests Maven..."
-          mvn -B test
-
-      - name: "🧪 Run Tests (Gradle)"
-        if: hashFiles('**/build.gradle') != '' || hashFiles('**/build.gradle.kts') != ''
-        run: |
-          echo "Exécution des tests Gradle..."
-          ./gradlew test || gradle test
+          ./gradlew build --no-daemon || gradle build --no-daemon
+          # --no-daemon : évite les fuites de mémoire sur les runners
 
       - name: "🛡️ Security Scan (Trivy)"
         uses: aquasecurity/trivy-action@0.28.0
@@ -132,7 +124,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
   # ============================================================================
-  # JOB 3 : DEPLOY
+  # JOB 3 : DEPLOY (Uniquement sur main)
   # ============================================================================
   deploy:
     name: "🚀 Déploiement Souverain"
@@ -141,33 +133,33 @@ jobs:
     if: github.ref == 'refs/heads/main' && needs.build_and_test.result == 'success'
 
     steps:
-      - name: "📥 Checkout Code"
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: "☕ Setup Java (for packaging)"
+      - name: "☕ Setup Java"
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: ${{ env.JAVA_DISTRIBUTION }}
 
-      - name: "📦 Prepare Artifact"
+      - name: "📦 Package for Deployment"
         run: |
           mkdir -p dist
-          # Si c'est Maven, on package le .jar
+          
           if [ -f "pom.xml" ]; then
-            mvn -B package -DskipTests
+            mvn -B -ntp package -DskipTests
             cp target/*.jar dist/ 2>/dev/null || true
           fi
-          # Si c'est Gradle, on récupère le .jar
-          if [ -f "build.gradle" ]; then
+          
+          if [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
             ./gradlew assemble -x test || gradle assemble -x test
             cp build/libs/*.jar dist/ 2>/dev/null || true
           fi
           
-          echo "Build info - ${{ github.sha }}" > dist/build-info.txt
+          echo "Build ${{ github.sha }} - $(date -u +%Y-%m-%dT%H:%M:%SZ)" > dist/build-info.txt
 
       - name: "📤 Upload Artifact"
         uses: actions/upload-artifact@v4
         with:
           name: nexus-omega-java-build
           path: dist/
+          retention-days: 30
