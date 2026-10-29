@@ -1,0 +1,177 @@
+name: "⚡ NEXUS OMEGA - Java Auto-Heal & Deploy"
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  schedule:
+    - cron: '0 0 * * 0' # Maintenance tous les dimanches
+
+# Sécurité : Lecture seule par défaut
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: "17"
+  JAVA_DISTRIBUTION: "temurin"
+
+jobs:
+  # ============================================================================
+  # JOB 1 : AUTO-REPAIR (Nettoyage et formatage Java)
+  # ============================================================================
+  auto_repair:
+    name: "🔧 Usine de Nettoyage Java"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      changes_made: ${{ steps.check_changes.outputs.changes }}
+
+    steps:
+      - name: "📥 Checkout Code"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "☕ Setup Java"
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          # Cache intelligent : n'active le cache que si le fichier de build existe
+          cache: ${{ hashFiles('**/pom.xml', '**/build.gradle', '**/build.gradle.kts') != '' && 'maven' || '' }}
+
+      - name: "🛠️ Install google-java-format"
+        run: |
+          # Téléchargement de l'outil de formatage officiel de Google
+          wget -q https://github.com/google/google-java-format/releases/latest/download/google-java-format-1.22.0-all-deps.jar -O /tmp/gjf.jar
+          chmod +x /tmp/gjf.jar
+
+      - name: "🧹 Format Java Code"
+        continue-on-error: true
+        run: |
+          # VÉRIFICATION STRICTE : On ne formate que s'il y a des fichiers .java
+          if find . -name "*.java" -not -path "*/target/*" -not -path "*/.git/*" | grep -q .; then
+            echo "Formatage des fichiers Java..."
+            find . -name "*.java" -not -path "*/target/*" -not -path "*/.git/*" -exec java -jar /tmp/gjf.jar --replace {} +
+          else
+            echo "Aucun fichier Java trouvé."
+          fi
+
+      - name: "📊 Check Changes"
+        id: check_changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "🚀 Create PR"
+        if: steps.check_changes.outputs.changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "⚡ NEXUS OMEGA : Auto-Réparation (Java Format)"
+          title: "🩺 Auto-Réparation : Code Java Formaté"
+          branch: nexus-omega/java-repair-${{ github.run_id }}
+          delete-branch: true
+
+  # ============================================================================
+  # JOB 2 : BUILD & TEST (Maven / Gradle)
+  # ============================================================================
+  build_and_test:
+    name: "🏗️ Construction et test Souverain"
+    runs-on: ubuntu-latest
+    needs: auto_repair
+    # On lance si le code n'a pas changé (déjà propre) ou si c'est une PR
+    if: needs.auto_repair.outputs.changes_made == 'false' || github.event_name == 'pull_request'
+
+    steps:
+      - name: "📥 Checkout Code"
+        uses: actions/checkout@v4
+
+      - name: "☕ Setup Java"
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: ${{ hashFiles('**/pom.xml') != '' && 'maven' || hashFiles('**/build.gradle') != '' && 'gradle' || '' }}
+
+      - name: "📦 Install Dependencies & Build (Maven)"
+        if: hashFiles('**/pom.xml') != ''
+        run: |
+          echo "Maven détecté. Compilation..."
+          # -B (batch mode), -DskipTests (on teste séparément)
+          mvn -B clean compile
+
+      - name: "📦 Install Dependencies & Build (Gradle)"
+        if: hashFiles('**/build.gradle') != '' || hashFiles('**/build.gradle.kts') != ''
+        run: |
+          echo "Gradle détecté. Compilation..."
+          chmod +x gradlew || true
+          ./gradlew build -x test || gradle build -x test
+
+      - name: "🧪 Run Tests (Maven)"
+        if: hashFiles('**/pom.xml') != ''
+        run: |
+          echo "Exécution des tests Maven..."
+          mvn -B test
+
+      - name: "🧪 Run Tests (Gradle)"
+        if: hashFiles('**/build.gradle') != '' || hashFiles('**/build.gradle.kts') != ''
+        run: |
+          echo "Exécution des tests Gradle..."
+          ./gradlew test || gradle test
+
+      - name: "🛡️ Security Scan (Trivy)"
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
+  # ============================================================================
+  # JOB 3 : DEPLOY
+  # ============================================================================
+  deploy:
+    name: "🚀 Déploiement Souverain"
+    runs-on: ubuntu-latest
+    needs: [auto_repair, build_and_test]
+    if: github.ref == 'refs/heads/main' && needs.build_and_test.result == 'success'
+
+    steps:
+      - name: "📥 Checkout Code"
+        uses: actions/checkout@v4
+
+      - name: "☕ Setup Java (for packaging)"
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: "📦 Prepare Artifact"
+        run: |
+          mkdir -p dist
+          # Si c'est Maven, on package le .jar
+          if [ -f "pom.xml" ]; then
+            mvn -B package -DskipTests
+            cp target/*.jar dist/ 2>/dev/null || true
+          fi
+          # Si c'est Gradle, on récupère le .jar
+          if [ -f "build.gradle" ]; then
+            ./gradlew assemble -x test || gradle assemble -x test
+            cp build/libs/*.jar dist/ 2>/dev/null || true
+          fi
+          
+          echo "Build info - ${{ github.sha }}" > dist/build-info.txt
+
+      - name: "📤 Upload Artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-omega-java-build
+          path: dist/
