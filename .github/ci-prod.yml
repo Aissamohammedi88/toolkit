@@ -1,0 +1,193 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEXUS PRODUCTION PIPELINE — Inspired by Microsoft & Top Open-Source Contributors
+# ═══════════════════════════════════════════════════════════════════════════════
+# Structure : Lint → Type Check → Test (Matrix) → Security → Build → Signature
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: "🛡️ Nexus Production CI"
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+# Loi 1 : Annulation des runs obsolètes pour économiser les ressources
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Loi 2 : Moindre privilège par défaut
+permissions:
+  contents: read
+
+jobs:
+  # ─── STAGE 1 : QUALITÉ DU CODE (Feedback Rapide) ─────────────────────────────
+  quality:
+    name: "🔍 Quality & Lint"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Setup Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          # Cache intelligent : on ne l'active que si un fichier de dépendance existe
+          cache: ${{ hashFiles('requirements.txt', 'pyproject.toml') != '' && 'pip' || '' }}
+
+      - name: "Install Dependencies"
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+          if [ -f "pyproject.toml" ]; then pip install .; fi
+          pip install ruff mypy black
+
+      - name: "Ruff (Lint)"
+        run: ruff check .
+
+      - name: "Black (Format Check)"
+        run: black --check .
+
+  # ─── STAGE 2 : TYPAGE (Mypy) ─────────────────────────────────────────────────
+  type-check:
+    name: "🧠 Type Check (Mypy)"
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: ${{ hashFiles('requirements.txt', 'pyproject.toml') != '' && 'pip' || '' }}
+      - name: "Install Dependencies"
+        run: |
+          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+          if [ -f "pyproject.toml" ]; then pip install .; fi
+          pip install mypy types-requests types-PyYAML # Ajoute tes stubs ici si besoin
+
+      - name: "Mypy Check"
+        run: mypy . --ignore-missing-imports
+
+  # ─── STAGE 3 : TESTS (Matrice Multi-Versions) ────────────────────────────────
+  test:
+    name: "🧪 Test (Python ${{ matrix.python-version }})"
+    needs: quality
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: ${{ hashFiles('requirements.txt', 'pyproject.toml') != '' && 'pip' || '' }}
+
+      - name: "Install Dependencies"
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+          if [ -f "pyproject.toml" ]; then pip install .; fi
+          pip install pytest pytest-cov
+
+      - name: "Run Tests"
+        run: |
+          if [ -d "tests" ]; then
+            pytest tests/ -v --cov=.
+          else
+            echo "Pas de dossier tests/, on passe."
+          fi
+
+  # ─── STAGE 4 : SÉCURITÉ (Zéro-Trust) ─────────────────────────────────────────
+  security:
+    name: "🛡️ Security Scan"
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # Requis pour uploader le SARIF
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Trivy Filesystem Scan"
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0' # On ne bloque pas le pipeline, on alerte
+
+      - name: "Upload SARIF to GitHub Security"
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ─── STAGE 5 : BUILD (Packaging) ─────────────────────────────────────────────
+  build:
+    name: "📦 Build Distribution"
+    needs: [test, type-check, security]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: "Build Wheel & Sdist"
+        run: |
+          python -m pip install --upgrade build
+          if [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
+            python -m build
+          else
+            echo "Pas de configuration de build (pyproject.toml/setup.py). On crée une archive simple."
+            mkdir -p dist
+            tar -czf dist/source.tar.gz . --exclude='.git' --exclude='dist'
+          fi
+
+      - name: "Upload Artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package
+          path: dist/
+
+  # ─── STAGE 6 : SIGNATURE NEXUS (La petite touche unique) ─────────────────────
+  nexus-signature:
+    name: "👑 NEXUS Signature"
+    needs: [quality, type-check, test, security, build]
+    if: always() # S'exécute même si un job a échoué
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Generate Final Report"
+        run: |
+          # Statut global
+          if [[ "${{ needs.quality.result }}" == "success" && "${{ needs.type-check.result }}" == "success" && "${{ needs.test.result }}" == "success" && "${{ needs.security.result }}" == "success" && "${{ needs.build.result }}" == "success" ]]; then
+            STATUS="✅ SUCCESS"
+            COLOR="green"
+          else
+            STATUS="❌ FAILURE"
+            COLOR="red"
+          fi
+
+          # Écriture du rapport dans l'interface GitHub
+          {
+            echo "# 👑 NEXUS PRODUCTION PIPELINE"
+            echo ""
+            echo "**Commit:** \`${{ github.sha }}\`"
+            echo "**Statut Global:** **$STATUS**"
+            echo ""
+            echo "| Stage | Résultat |"
+            echo "|-------|----------|"
+            echo "| 🔍 Quality & Lint | ${{ needs.quality.result }} |"
+            echo "| 🧠 Type Check | ${{ needs.type-check.result }} |"
+            echo "| 🧪 Test Matrix | ${{ needs.test.result }} |"
+            echo "| 🛡️ Security | ${{ needs.security.result }} |"
+            echo "| 📦 Build | ${{ needs.build.result }} |"
+            echo ""
+            echo "---"
+            echo "*Généré par le Nexus Production Pipeline.*"
+          } >> $GITHUB_STEP_SUMMARY
