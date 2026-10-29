@@ -7,15 +7,12 @@ on:
     branches: [ "main", "master" ]
   schedule:
     - cron: '0 0 * * 0' # Maintenance tous les dimanches
-
 # Sécurité : Lecture seule par défaut
 permissions:
   contents: read
-
 env:
   JAVA_VERSION: "17"
   JAVA_DISTRIBUTION: "temurin"
-
 jobs:
   # ============================================================================
   # JOB 1 : AUTO-REPAIR (Nettoyage et formatage Java)
@@ -28,7 +25,6 @@ jobs:
       pull-requests: write
     outputs:
       changes_made: ${{ steps.check_changes.outputs.changes }}
-
     steps:
       - name: "📥 Checkout Code"
         uses: actions/checkout@v4
