@@ -1,0 +1,165 @@
+name: "🔍 Nexus Inspector Loop"
+
+on:
+  # En boucle : toutes les 6 heures (00:00, 06:00, 12:00, 18:00)
+  schedule:
+    - cron: '0 */6 * * *'
+
+  # Sur chaque push
+  push:
+    branches: [ "main", "master" ]
+
+  # Sur chaque PR
+  pull_request:
+    branches: [ "main", "master" ]
+
+  # Manuel
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Mode d\'inspection'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - secrets
+          - quality
+          - security
+
+# Permissions minimales nécessaires
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  security-events: write
+
+jobs:
+  inspect:
+    name: "🛡️ System Inspection"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    # On définit le mode par défaut pour les triggers non-manuels
+    env:
+      INSPECT_MODE: ${{ github.event.inputs.mode || 'all' }}
+
+    steps:
+      - name: "📥 Checkout Code"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Nécessaire pour scanner l'historique Git
+
+      # ─── INITIALISATION DU RAPPORT ───
+      # On crée un rapport vide pour éviter les crashs si les étapes suivantes échouent
+      - name: "📄 Initialize Report"
+        run: |
+          echo '{"findings": 0, "secrets": 0, "quality_issues": 0, "recommendations": 0, "recommendations_list": []}' > nexus-report.json
+
+      # ─── INSPECTION 1 : SECRETS (Gitleaks) ───
+      - name: "🔐 Scan for Secrets (Gitleaks)"
+        if: env.INSPECT_MODE == 'all' || env.INSPECT_MODE == 'secrets'
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      # ─── INSPECTION 2 : QUALITÉ (Ruff / ESLint via Trivy) ───
+      - name: "📊 Scan for Quality Issues (Trivy Config)"
+        if: env.INSPECT_MODE == 'all' || env.INSPECT_MODE == 'quality'
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'config'
+          scan-ref: '.'
+          format: 'json'
+          output: 'trivy-config.json'
+        continue-on-error: true
+
+      # ─── INSPECTION 3 : SÉCURITÉ (CodeQL/Trivy) ───
+      - name: "🛡️ Scan for Vulnerabilities (Trivy FS)"
+        if: env.INSPECT_MODE == 'all' || env.INSPECT_MODE == 'security'
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'json'
+          output: 'trivy-fs.json'
+        continue-on-error: true
+
+      # ─── AGRÉGATION DES RÉSULTATS ───
+      # On fusionne les résultats (simulé ici pour l'exemple sans dépendances externes)
+      - name: "🔀 Aggregate Results"
+        run: |
+          # Comptage basique des fichiers générés (preuve d'exécution)
+          SECRETS_COUNT=$(find . -name "gitleaks-report.json" -exec cat {} \; 2>/dev/null | jq '. | length' || echo 0)
+          QUALITY_COUNT=$(find . -name "trivy-config.json" -exec cat {} \; 2>/dev/null | jq '.Results | length' || echo 0)
+          SECURITY_COUNT=$(find . -name "trivy-fs.json" -exec cat {} \; 2>/dev/null | jq '.Results | length' || echo 0)
+          
+          TOTAL=$((SECRETS_COUNT + QUALITY_COUNT + SECURITY_COUNT))
+          
+          # Génération du rapport final structuré
+          cat > nexus-report.json <<EOF
+          {
+            "findings": $TOTAL,
+            "secrets": $SECRETS_COUNT,
+            "quality_issues": $QUALITY_COUNT,
+            "security_vulns": $SECURITY_COUNT,
+            "recommendations": $TOTAL,
+            "recommendations_list": [
+              "Vérifier les secrets trouvés par Gitleaks.",
+              "Corriger les problèmes de configuration dans Trivy.",
+              "Mettre à jour les dépendances vulnérables."
+            ]
+          }
+          EOF
+
+      # ─── UPLOAD DU RAPPORT ───
+      - name: "📤 Upload Report"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-inspector-report
+          path: nexus-report.json
+          retention-days: 30
+
+      # ─── COMMENTAIRE SUR LA PR (Sécurisé) ───
+      - name: "💬 Comment on PR"
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // SÉCURITÉ : On vérifie que le fichier existe avant de le lire
+            if (!fs.existsSync('nexus-report.json')) {
+              console.log('Rapport introuvable. Annulation du commentaire.');
+              return;
+            }
+
+            const report = JSON.parse(fs.readFileSync('nexus-report.json', 'utf8'));
+            const recs = report.recommendations_list.map(r => `- ${r}`).join('\n');
+            
+            const body = `## 🔍 Nexus Inspector Report
+
+            | Métrique | Valeur |
+            |----------|--------|
+            | Findings Totaux | **${report.findings}** |
+            | Secrets | ${report.secrets} |
+            | Qualité | ${report.quality_issues} |
+            | Vulnérabilités | ${report.security_vulns} |
+
+            ### 📝 Recommandations
+            ${recs || 'Aucune.'}
+            `;
+            
+            try {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+              console.log('Commentaire posté avec succès.');
+            } catch (error) {
+              console.error('Erreur lors du post du commentaire :', error);
+            }
