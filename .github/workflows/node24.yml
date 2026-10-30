@@ -1,0 +1,99 @@
+# =============================================================================
+# NEXUS NODE — pipeline npm multi-runtime
+# Généré par NEXUS CI GENERATOR v2.0.0
+# -----------------------------------------------------------------------------
+# Chaîne de contrôle :
+#   1. build  : matrice Node — npm ci, lint, test, build, artefacts
+#   2. audit  : npm audit --audit-level=high (bloquant, en parallèle)
+# Exige : package.json + package-lock.json
+# =============================================================================
+name: 'NEXUS NODE (npm multi-runtime)'
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 'nexus-node-${{ github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------------
+  # JOB 1 : build — matrice de runtimes. fail-fast off.
+  # -------------------------------------------------------------------
+  build:
+    name: 'npm (Node ${{ matrix.node }})'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # LTS d'abord, puis les versions récentes
+        node: [20, 22, 24]
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+
+      # VÉRIFICATION CRITIQUE : On vérifie le lockfile AVANT le cache
+      - name: 'Verify Lockfile'
+        run: |
+          if [ ! -f "package-lock.json" ]; then
+            echo "::error::ERREUR: package-lock.json manquant. Exécutez 'npm install' localement et commitez-le."
+            exit 1
+          fi
+
+      - name: 'Setup Node ${{ matrix.node }} (cache npm)'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '${{ matrix.node }}'
+          cache: 'npm'
+
+      - name: 'Installer les dépendances (lockfile strict)'
+        run: npm ci
+
+      - name: 'Lint'
+        run: npm run lint --if-present
+
+      - name: 'Tests'
+        run: npm test --if-present
+
+      - name: 'Build'
+        run: npm run build --if-present
+        env:
+          NODE_ENV: production
+
+      - name: 'Uploader les sorties de build'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-node-${{ matrix.node }}
+          path: |
+            dist/
+            build/
+            .next/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # -------------------------------------------------------------------
+  # JOB 2 : audit — npm audit bloquant au niveau HIGH.
+  # S'exécute EN PARALLÈLE du build pour un feedback immédiat.
+  # -------------------------------------------------------------------
+  audit:
+    name: 'npm audit (CVE HIGH+)'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+
+      - name: 'Setup Node (cache npm)'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # On utilise la LTS pour l'audit
+          cache: 'npm'
+
+      - name: 'Audit des dépendances (bloquant HIGH/CRITICAL)'
+        run: npm audit --audit-level=high
