@@ -1,0 +1,123 @@
+NEXUS JAVA — pipeline Maven multi-JDK
+# Généré par NEXUS CI GENERATOR v2.0.0 le 2026-10-30T21:07:07Z (type: java)
+# Fichier: .nexus-tmp.fbY3cI | Branche: main | JDK: 21
+# -----------------------------------------------------------------------------
+# Chaîne de contrôle :
+#   1. build      : matrice JDK [17, 21] — compile + tests + package
+#   2. owasp      : dependency-check CVE sur les dépendances Maven
+#   3. codeql     : analyse statique de sécurité (language: java-kotlin)
+# Exige : pom.xml à la racine du dépôt.
+# Secrets requis : aucun (GITHUB_TOKEN auto suffit).
+# =============================================================================
+name: 'NEXUS JAVA (maven multi-jdk)'
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 'nexus-java-${{ github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------------
+  # JOB 1/3 : build — matrice JDK. fail-fast désactivé : on veut voir
+  #   les DEUX JDK échouer indépendamment, sinon le 17 cache le 21.
+  # -------------------------------------------------------------------
+  build:
+    name: 'Maven (JDK ${{ matrix.java }})'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [17, 21]
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+      - name: 'Setup JDK ${{ matrix.java }} (temurin, cache maven)'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - name: 'Vérifier la structure du projet'
+        run: |
+          test -f pom.xml || {
+            echo "ERREUR: pom.xml manquant a la racine du dépôt"
+            exit 1
+          }
+      - name: 'Compiler sans tests (fail fast sur la compilation)'
+        run: mvn -B -ntp -DskipTests clean compile
+      - name: 'Tests + vérification complète (mvn verify)'
+        run: mvn -B -ntp verify
+      - name: 'Uploader les JAR produits'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-java-jdk${{ matrix.java }}
+          path: target/*.jar
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # -------------------------------------------------------------------
+  # JOB 2/3 : owasp — dependency-check-maven. Lourd (télécharge la base
+  #   NVD) donc isolé de la matrice. Le rapport est un artefact, jamais
+  #   perdu, même si le job échoue (always()).
+  # -------------------------------------------------------------------
+  owasp:
+    name: 'OWASP dependency-check'
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+      - name: 'Setup JDK (temurin, cache maven)'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - name: 'Dependency-check (CVE des dépendances)'
+        run: mvn -B -ntp org.owasp:dependency-check-maven:check -DskipTests
+      - name: 'Uploader le rapport OWASP'
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-owasp-report
+          path: target/dependency-check-report.html
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # -------------------------------------------------------------------
+  # JOB 3/3 : codeql — analyse statique de sécurité Java.
+  # -------------------------------------------------------------------
+  codeql:
+    name: 'CodeQL (securite statique)'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        language: [java-kotlin]
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+      - name: 'Initialisation CodeQL'
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+      - name: 'Autobuild (Maven)'
+        uses: github/codeql-action/autobuild@v3
+      - name: 'Analyse CodeQL'
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'
+
+
