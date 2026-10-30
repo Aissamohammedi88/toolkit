@@ -1,0 +1,23 @@
+name: Loop Workflow 
+on:
+  push
+  workflow_dispatch
+
+jobs:
+  loop_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4 # Récupère le dépôt local
+
+      - name: Créer répertoire de sortie
+        run: mkdir -p output
+        # Crée un répertoire où les artefacts seront stockés
+
+      - name: Boucle de génération d'artefacts
+        run: |
+          for i in {1..5}
+          do
+            echo "Iteration $i"
+            # Générer un QR code contenant l'indice de l'itération
+            curl -s "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Iter
