@@ -1,0 +1,23 @@
+name: 'Nexus Autonomous Guardian'
+description: 'LLM-powered code review & auto-healing agent.'
+author: 'Aissa Mohammedi (DGK)'
+
+inputs:
+  github-token:
+    description: 'GitHub Token (default: ${{ github.token }})'
+    required: true
+  llm-api-key:
+    description: 'OpenAI or Anthropic API Key'
+    required: true
+  llm-model:
+    description: 'Model to use (e.g., gpt-4o)'
+    required: false
+    default: 'gpt-4o'
+  fail-on-critical:
+    description: 'Request changes if critical issue found'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'node20'
+  main: 'src/index.js'
