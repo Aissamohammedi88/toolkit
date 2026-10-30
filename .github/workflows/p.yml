@@ -1,0 +1,100 @@
+# =============================================================================
+# NEXUS PHP — pipeline composer & qualité
+# Généré par NEXUS CI GENERATOR v2.0.0 le 2026-10-30T10:19:17Z (type: php)
+# Fichier: .nexus-tmp.4VPVs8 | Branche: main | PHP: 8.3
+# -----------------------------------------------------------------------------
+# Chaîne de contrôle :
+#   1. quality : matrice PHP ['8.2', '8.3'] — install, style, tests
+#   2. audit   : composer audit (CVE des dépendances packagist)
+# Exige : composer.json à la racine.
+# Secrets requis : aucun.
+# =============================================================================
+name: 'NEXUS PHP (composer & qualite)'
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 'nexus-php-${{ github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------------
+  # JOB 1/2 : quality — la matrice prouve la compatibilité des versions
+  #   PHP supportées actives. php-cs-fixer en --dry-run : il ne réécrit
+  #   JAMAIS le code en CI, il constate. Si le style est cassé, c'est au
+  #   développeur de corriger, pas à la machine de maquiller.
+  # -------------------------------------------------------------------
+  quality:
+    name: 'Qualite (PHP ${{ matrix.php }})'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3']
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+      - name: 'Setup PHP ${{ matrix.php }} (extensions: intl, mbstring)'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '${{ matrix.php }}'
+          extensions: intl, mbstring, xml
+          tools: php-cs-fixer
+          coverage: none
+      - name: 'Vérifier la structure du projet'
+        run: |
+          test -f composer.json || {
+            echo "ERREUR: composer.json manquant a la racine"
+            exit 1
+          }
+          composer validate --strict
+      - name: 'Installer les dépendances (lockfile requis)'
+        run: composer install --prefer-dist --no-progress
+      - name: 'Style de code (php-cs-fixer --dry-run)'
+        run: |
+          if [ -f .php-cs-fixer.dist.php ] || [ -f .php-cs-fixer.php ]; then
+            PHP_CS_FIXER_IGNORE_ENV=1 php-cs-fixer fix --dry-run --diff
+          else
+            echo "pas de config php-cs-fixer détectée — style non vérifié"
+          fi
+      - name: 'Tests (phpunit, bloquant si config présente)'
+        run: |
+          if [ -f phpunit.xml ] || [ -f phpunit.xml.dist ]; then
+            vendor/bin/phpunit --configuration phpunit.xml
+          else
+            echo "ERREUR: phpunit.xml absent — un projet PHP sans tests"
+            echo "n'est pas un projet, c'est un prototype. Ajoutez phpunit."
+            exit 1
+          fi
+
+  # -------------------------------------------------------------------
+  # JOB 2/2 : audit — composer audit scanne les dépendances déclarées
+  #   dans composer.lock contre l'advisory database Packagist.
+  # -------------------------------------------------------------------
+  audit:
+    name: 'Composer audit (CVE dépendances)'
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+      - name: 'Setup PHP'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: 'Audit des dépendances'
+        run: |
+          test -f composer.lock || {
+            echo "ERREUR: composer.lock absent — commitez le lockfile"
+            exit 1
+          }
+          composer audit
+
