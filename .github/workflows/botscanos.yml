@@ -1,0 +1,49 @@
+name: Secrets Scan (no Gitleaks)
+on:
+push:
+pull_request:
+schedule:
+- cron: '0 */6 * * *'
+workflow_dispatch:
+
+jobs:
+scan:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v4
+with:
+fetch-depth: 0
+
+- name: Scan for secrets (bash native)
+run: |
+echo "=== SCAN DE SECRETS ==="
+PATTERNS=(
+"AKIA[0-9A-Z]{16}:AWS Access Key"
+"sk-[a-zA-Z0-9]{32,}:OpenAI/Anthropic key"
+"ghp_[a-zA-Z0-9]{36}:GitHub Personal Token"
+"gho_[a-zA-Z0-9]{36}:GitHub OAuth"
+"github_pat_[a-zA-Z0-9_]{82}:GitHub PAT"
+"xox[baprs]-[a-zA-Z0-9-]{10,}:Slack Token"
+"AIza[0-9A-Za-z_-]{35}:Google API Key"
+"-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----:Private Key"
+"mongodb\+srv://[^:]+:[^@]+@:MongoDB connection string"
+"postgres://[^:]+:[^@]+@:PostgreSQL connection string"
+)
+
+FOUND=0
+for pattern in "${PATTERNS[@]}"; do
+regex="${pattern%%:*}"
+name="${pattern##*:}"
+matches=$(grep -rEn "$regex" . --exclude-dir=.git 2>/dev/null | head -5 || true)
+if [ -n "$matches" ]; then
+echo "❌ $name trouvé :"
+echo "$matches"
+FOUND=$((FOUND+1))
+fi
+done
+
+if [ "$FOUND" -gt 0 ]; then
+echo "::error::$FOUND type(s) de secrets détectés"
+exit 1
+fi
+echo "✅ Aucun secret détecté"
