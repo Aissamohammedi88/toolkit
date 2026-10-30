@@ -1,0 +1,103 @@
+name: 'Nexus Inspector'
+description: 'Inspection complète : secrets, qualité, sécurité, recommandations'
+author: 'Aissa Mohammedi'
+branding:
+  icon: 'eye'
+  color: 'purple'
+
+inputs:
+  github-token:
+    description: 'Token GitHub'
+    required: true
+  mode:
+    description: 'Mode : all, secrets, quality, security'
+    required: false
+    default: 'all'
+  fail-on-severity:
+    description: 'Fail on severity : info, minor, major, critical'
+    required: false
+    default: 'critical'
+  enable-gitleaks:
+    description: 'Activer Gitleaks'
+    required: false
+    default: 'true'
+  enable-datahub:
+    description: 'Activer DataHub metadata'
+    required: false
+    default: 'false'
+
+outputs:
+  findings:
+    description: 'Nombre total de findings'
+    value: ${{ steps.summary.outputs.total }}
+  secrets:
+    description: 'Nombre de secrets détectés'
+    value: ${{ steps.summary.outputs.secrets }}
+  quality-issues:
+    description: 'Nombre de problèmes de qualité'
+    value: ${{ steps.summary.outputs.quality }}
+  recommendations:
+    description: 'Nombre de recommandations'
+    value: ${{ steps.summary.outputs.recos }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup
+      shell: bash
+      run: |
+        echo "Nexus Inspector starting..."
+        echo "Mode: ${{ inputs.mode }}"
+
+    - name: Run Gitleaks
+      if: inputs.enable-gitleaks == 'true'
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true
+
+    - name: Run Quality Scan
+      id: quality
+      shell: bash
+      run: bash "${{ github.action_path }}/src/quality-scan.sh"
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+
+    - name: Run Security Scan
+      id: security
+      shell: bash
+      run: bash "${{ github.action_path }}/src/security-scan.sh"
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+
+    - name: Generate Recommendations
+      id: recommend
+      shell: bash
+      run: bash "${{ github.action_path }}/src/recommend.sh"
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+
+    - name: Final Summary
+      id: summary
+      shell: bash
+      run: |
+        echo "total=0" >> $GITHUB_OUTPUT
+        echo "secrets=0" >> $GITHUB_OUTPUT
+        echo "quality=0" >> $GITHUB_OUTPUT
+        echo "recos=0" >> $GITHUB_OUTPUT
+        
+        {
+          echo "### 🔍 Nexus Inspector Summary"
+          echo ""
+          echo "| Check | Status |"
+          echo "|-------|--------|"
+          echo "| Gitleaks (Secrets) | ${{ inputs.enable-gitleaks == 'true' && '✅ Scanned' || '⏭ Skipped' }} |"
+          echo "| Quality | ${{ steps.quality.outcome }} |"
+          echo "| Security | ${{ steps.security.outcome }} |"
+          echo "| Recommendations | ${{ steps.recommend.outcome }} |"
+        } >> $GITHUB_STEP_SUMMARY
