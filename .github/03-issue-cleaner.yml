@@ -1,0 +1,21 @@
+name: "03 - Issue Cleaner"
+on:
+  schedule:
+    - cron: '0 0 * * *' # Tous les jours à minuit
+permissions:
+  issues: write
+  pull-requests: write
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Close Stale Issues & PRs"
+        uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          stale-issue-message: 'Cette issue est inactive depuis 30 jours. Elle sera fermée dans 7 jours si aucune activité.'
+          stale-pr-message: 'Cette PR est inactive. Elle sera fermée dans 7 jours.'
+          days-before-stale: 30
+          days-before-close: 7
+          exempt-issue-labels: 'pinned,security'
+          exempt-pr-labels: 'pinned,security'
