@@ -1,0 +1,22 @@
+name: 'Nexus Self-Healing Agent'
+description: 'Autonomous CI agent that fixes failing tests and opens a PR.'
+author: 'Aissa Mohammedi (DGK)'
+
+inputs:
+  github-token:
+    description: 'Token with write permissions'
+    required: true
+  llm-api-key:
+    description: 'API key for OpenAI/Anthropic'
+    required: true
+  model:
+    description: 'LLM to use'
+    required: false
+    default: 'gpt-4o'
+  test-command:
+    description: 'Command to run tests (e.g., npm test, pytest)'
+    required: true
+
+runs:
+  using: 'node20'
+  main: 'src/index.js'
