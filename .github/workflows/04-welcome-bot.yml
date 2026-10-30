@@ -1,0 +1,23 @@
+name: "04 - Welcome Bot"
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+permissions:
+  issues: write
+  pull-requests: write
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Welcome First-Timers"
+        uses: actions/first-interaction@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-message: |
+            👋 Bienvenue dans la **Boîte à Outils** de Nexus Quantum !
+            Ce dépôt applique le protocole de souveraineté. Ton issue a été assignée à l'architecte. Prépare tes arguments.
+          pr-message: |
+            🛡️ **Pull Request reçue.**
+            Analyse en cours par le superviseur Polinascience. Si le score est < 60/100, la PR sera rejetée. Fais de ton mieux.
