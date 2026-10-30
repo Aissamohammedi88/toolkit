@@ -1,0 +1,74 @@
+name: 'NEXUS NODE (npm multi-runtime)'
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: 'nexus-node-${{ github.ref }}'
+  cancel-in-progress: true
+
+jobs
+  build:
+    name: 'npm (Node ${{ matrix.node }})'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [24, 20, 22]
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+      - name: 'Setup Node ${{ matrix.node }} (cache npm)'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '${{ matrix.node }}'
+          cache: 'npm'
+      - name: 'Installer les dépendances (lockfile requis)'
+        run: |
+          test -f package-lock.json || {
+            echo "ERREUR: package-lock.json manquant — commitez le lockfile"
+            exit 1
+          }
+          npm ci
+      - name: 'Lint (si le script existe)'
+        run: npm run lint --if-present
+      - name: 'Tests'
+        run: npm test --if-present
+      - name: 'Build'
+        run: npm run build --if-present
+        env:
+          NODE_ENV: production
+      - name: 'Uploader les sorties de build'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-node-${{ matrix.node }}
+          path: |
+            dist/
+            build/
+            .next/
+          retention-days: 7
+          if-no-files-found: ignore
+  # -------------------------------------------------------------------
+  # JOB 2/2 : audit — npm audit bloquant au niveau HIGH. Un CVE HIGH
+  #   dans les dépendances directes arrête le pipeline : on patche
+  #   d'abord, on shippe ensuite.
+  # -------------------------------------------------------------------
+  audit:
+    name: 'npm audit (CVE HIGH+)'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+      - name: 'Setup Node (cache npm)'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: 'Audit des dépendances (bloquant HIGH/CRITICAL)'
+        run: npm audit --audit-level=high
