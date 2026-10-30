@@ -1,0 +1,75 @@
+name: 'Nexus Inspector'description: 'Inspection complète : secrets, qualité, sécurité, recommandations'
+author: 'Aissa Mohammedi'
+branding:
+icon: 'eye'
+color: 'purple'
+
+inputs:
+github-token:
+description: 'Token GitHub'
+required: true
+mode:
+description: 'Mode : all, secrets, quality, security'
+required: false
+default: 'all'
+fail-on-severity:
+description: 'Fail on severity : info, minor, major, critical'
+required: false
+default: 'critical'
+enable-gitleaks:
+description: 'Activer Gitleaks'
+required: false
+default: 'true'
+enable-datahub:
+description: 'Activer DataHub metadata'
+required: false
+default: 'false'
+
+outputs:
+findings:
+description: 'Nombre total de findings'
+secrets:
+description: 'Nombre de secrets détectés'
+quality-issues:
+description: 'Nombre de problèmes de qualité'
+recommendations:
+description: 'Nombre de recommandations'
+
+runs:
+using: 'composite'
+steps:
+- name: Checkout
+uses: actions/checkout@v4
+with:
+fetch-depth: 0
+
+- name: Setup
+shell: bash
+run: |
+echo "Nexus Inspector starting..."
+echo "Mode: ${{ inputs.mode }}"
+
+- name: Run Gitleaks
+if: inputs.enable-gitleaks == 'true'
+uses: gitleaks/gitleaks-action@v2
+env:
+GITHUB_TOKEN: ${{ inputs.github-token }}
+GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true
+
+- name: Run Quality Scan
+shell: bash
+run: ${{ github.action_path }}/src/quality-scan.sh
+env:
+GITHUB_TOKEN: ${{ inputs.github-token }}
+
+- name: Run Security Scan
+shell: bash
+run: ${{ github.action_path }}/src/security-scan.sh
+env:
+GITHUB_TOKEN: ${{ inputs.github-token }}
+
+- name: Generate Recommendations
+shell: bash
+run: ${{ github.action_path }}/src/recommend.sh
+env:
+GITHUB_TOKEN: ${{ inputs.github-token }}
