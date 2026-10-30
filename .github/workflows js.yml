@@ -1,0 +1,156 @@
+use strict';
+// NEXUS AETHER v3 — agents en arrière-plan.
+// Un agent = une tâche → plan par l'IA maîtresse → étapes exécutées une à une
+// (VRAIS appels IA) → résultat écrit dans workspace/agents/<id>/result.md.
+// La file vit DANS le daemon persistant : fermer la fenêtre n'arrête rien.
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { chat, loadConfig } = require('./router');
+const { remember } = require('./memory');
+
+const HOME = os.homedir();
+const STORE = path.join(HOME, '.aether', 'agents.json');
+
+let agents = {};
+let timer = null;
+
+function wsDir() {
+  return path.join(process.env.AETHER_WORKSPACE || path.join(HOME, 'Aether', 'workspace'), 'agents');
+}
+function cfgVal(k, d) {
+  try {
+    const c = loadConfig();
+    return (c.agentique && typeof c.agentique[k] !== 'undefined') ? c.agentique[k] : d;
+  } catch (e) { return d; }
+}
+function save() {
+  try {
+    fs.mkdirSync(path.dirname(STORE), { recursive: true });
+    fs.writeFileSync(STORE, JSON.stringify(agents, null, 2) + '\n');
+  } catch (e) {}
+}
+function load() {
+  try { agents = JSON.parse(fs.readFileSync(STORE, 'utf8')) || {}; } catch (e) { agents = {}; }
+  // au boot du daemon : les agents « en cours » deviennent « interrompu » (honnête)
+  Object.keys(agents).forEach(function (id) {
+    if (agents[id].status === 'en-cours') { agents[id].status = 'interrompu'; log(agents[id], 'daemon redémarré — agent marqué interrompu'); }
+  });
+  save();
+}
+function log(a, line) {
+  a.log = a.log || [];
+  a.log.push({ t: Date.now(), line: String(line).slice(0, 600) });
+  if (a.log.length > 400) a.log = a.log.slice(-300);
+}
+function broadcast(a) {
+  try {
+    if (global.__AETHER_V3_WS) global.__AETHER_V3_WS({
+      kind: 'agent', id: a.id, status: a.status, stepIndex: a.stepIndex,
+      steps: (a.steps || []).map(function (s) { return { label: s.label, status: s.status }; })
+    });
+  } catch (e) {}
+}
+function summary(a) {
+  return {
+    id: a.id, task: a.task, status: a.status, createdAt: a.createdAt, endedAt: a.endedAt,
+    stepIndex: a.stepIndex, steps: (a.steps || []).map(function (s) { return { label: s.label, status: s.status }; }),
+    resultFile: a.resultFile || null, error: a.error || null,
+    logTail: (a.log || []).slice(-12)
+  };
+}
+function create(task, opts) {
+  const id = 'ag-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+  const a = {
+    id: id, task: String(task || '').slice(0, 4000), status: 'en-file',
+    createdAt: Date.now(), startedAt: null, endedAt: null,
+    steps: [], stepIndex: -1, log: [], resultFile: null, error: null,
+    cancelRequested: false
+  };
+  agents[id] = a;
+  log(a, 'agent créé — placé en file d\u2019attente');
+  save(); kick(); broadcast(a);
+  return summary(a);
+}
+function get(id) { const a = agents[id]; return a ? summary(a) : null; }
+function detail(id) { return agents[id] ? JSON.parse(JSON.stringify(agents[id])) : null; }
+function list() {
+  return Object.keys(agents).map(function (id) { return summary(agents[id]); })
+    .sort(function (x, y) { return y.createdAt - x.createdAt; }).slice(0, 60);
+}
+function cancel(id) {
+  const a = agents[id]; if (!a) return null;
+  if (a.status === 'en-file') { a.status = 'annulé'; a.endedAt = Date.now(); log(a, 'annulé (encore en file)'); }
+  else if (a.status === 'en-cours') { a.cancelRequested = true; log(a, 'annulation demandée — arrêt à la fin de l\u2019étape en cours'); }
+  save(); broadcast(a); return summary(a);
+}
+function runningCount() {
+  return Object.keys(agents).filter(function (id) { return agents[id].status === 'en-cours'; }).length;
+}
+function kick() { if (!timer) timer = setInterval(tick, 1500); }
+function tick() {
+  const max = Math.max(1, Math.min(4, parseInt(cfgVal('maxConcurrent', 2), 10) || 2));
+  if (runningCount() >= max) return;
+  const next = Object.keys(agents).map(function (id) { return agents[id]; })
+    .filter(function (a) { return a.status === 'en-file'; })
+    .sort(function (x, y) { return x.createdAt - y.createdAt; })[0];
+  if (next) run(next);
+  const busy = Object.keys(agents).some(function (id) {
+    return agents[id].status === 'en-file' || agents[id].status === 'en-cours';
+  });
+  if (!busy && timer) { clearInterval(timer); timer = null; }
+}
+function extractJson(t) {
+  const m = String(t || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try { return JSON.parse(m[0]); } catch (e) { return null; }
+}
+async function callIA(messages) {
+  const out = await chat(messages, {});
+  return String(out.text || '');
+}
+async function run(a) {
+  a.status = 'en-cours'; a.startedAt = Date.now(); save(); broadcast(a);
+  try {
+    log(a, 'IA maîtresse : planification…'); broadcast(a);
+    let planTxt = '';
+    try {
+      planTxt = await callIA([
+        { role: 'system', content: 'Tu es le planificateur d\u2019agents de NEXUS AETHER. Découpe la tâche en 2 à 4 étapes courtes et concrètes. Réponds UNIQUEMENT avec un JSON {"etapes":["...","..."]}.' },
+        { role: 'user', content: a.task }
+      ]);
+    } catch (e) { throw new Error('IA maîtresse injoignable : ' + String((e && e.message) || e)); }
+    const plan = extractJson(planTxt);
+    const etapes = (plan && Array.isArray(plan.etapes) && plan.etapes.length)
+      ? plan.etapes : ['Analyser la tâche', 'Produire le résultat', 'Vérifier et rédiger'];
+    a.steps = etapes.slice(0, 5).map(function (s) { return { label: String(s).slice(0, 200), status: 'en-attente' }; });
+    save(); broadcast(a);
+    let context = '';
+    for (let i = 0; i < a.steps.length; i++) {
+      if (a.cancelRequested) throw new Error('annulé à la demande de l\u2019utilisateur');
+      a.stepIndex = i; a.steps[i].status = 'en-cours'; save(); broadcast(a);
+      const out = await callIA([
+        { role: 'system', content: 'Tu es un agent de NEXUS AETHER. Exécute UNE étape de façon directe et utile, sans bavardage.' },
+        { role: 'user', content: 'Tâche globale : ' + a.task + '\nContexte des étapes précédentes :\n' + (context || '(aucun)') + '\n\nÉtape à exécuter : ' + a.steps[i].label }
+      ]);
+      a.steps[i].status = 'terminé';
+      a.steps[i].resume = String(out).slice(0, 300);
+      context += '\n[' + a.steps[i].label + ']\n' + String(out).slice(0, 1500);
+      log(a, 'étape ' + (i + 1) + '/' + a.steps.length + ' terminée'); save(); broadcast(a);
+    }
+    if (a.cancelRequested) throw new Error('annulé à la demande de l\u2019utilisateur');
+    const dir = path.join(wsDir(), a.id);
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'result.md');
+    fs.writeFileSync(file, '# Agent ' + a.id + '\n\n**Tâche :** ' + a.task + '\n\n' + context.trim() + '\n');
+    a.resultFile = file; a.status = 'terminé'; a.endedAt = Date.now();
+    log(a, 'terminé — résultat : ' + file);
+    try { remember('agent', 'agent ' + a.id + ' terminé : ' + a.task.slice(0, 120)); } catch (e) {}
+    save(); broadcast(a);
+  } catch (e) {
+    a.status = a.cancelRequested ? 'annulé' : 'échec';
+    a.error = String((e && e.message) || e); a.endedAt = Date.now();
+    log(a, 'échec : ' + a.error); save(); broadcast(a);
+  }
+}
+module.exports = { create: create, list: list, get: get, detail: detail, cancel: cancel, load: load, runningCount: runningCount };
