@@ -1,0 +1,15 @@
+name: 'Nexus Swarm Orchestrator'
+description: 'Multi-agent code review (Security, Performance, Documentation).'
+author: 'Aissa Mohammedi (DGK)'
+
+inputs:
+  github-token:
+    required: true
+  llm-api-key:
+    required: true
+  model:
+    default: 'gpt-4o'
+
+runs:
+  using: 'node24'
+  main: 'src/index.js'
