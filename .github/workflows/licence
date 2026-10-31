@@ -1,0 +1,52 @@
+NEXUS SOVEREIGN STRICT LICENSE (NSSL) v1.0
+==========================================
+
+Copyright (c) 2026 Aissa Mohammedi (DGK) — Founder of Nexus Quantum.
+All rights reserved.
+
+PREAMBLE
+This license is designed to protect the intellectual property of the Nexus
+Sovereign Runtime (Node 25/22 Hybrid Engine, Permission-Mode Sandbox).
+Any individual, corporation, or entity (the "User") wishing to use this
+software must strictly adhere to the terms below.
+
+1. GRANT OF RIGHTS (NON-COMMERCIAL)
+Permission is granted to use, copy, modify, and distribute this Software for
+personal, academic, and non-commercial open-source purposes only, provided that:
+  a) The copyright notice and this license are included in all copies.
+  b) The User explicitly credits the creator in their README.md with the exact
+     text: "Powered by the Nexus Sovereign Runtime created by Aissa Mohammedi (DGK)."
+
+2. COMMERCIAL RESTRICTION & REVENUE SHARE
+Commercial use (including but not limited to SaaS, internal enterprise tools,
+or reselling) is strictly prohibited without an explicit, written commercial
+license agreement from the Author. 
+Any corporate entity generating revenue with this Software must negotiate a
+minimum 24% revenue-share or pay a licensing fee to:
+Ultraconnect Nexus Org / Aissa Mohammedi (DGK).
+
+3. UI ATTRIBUTION (THE VISIBLE CLAUSE)
+If the Software is used in a frontend, GUI, or public-facing application, the
+User MUST display the attribution "Nexus Sovereign Runtime" with a clickable
+link to the original GitHub repository in the "About" section, footer, or
+splash screen of the application.
+
+4. NON-COMPETE
+The User may not use this Software to build a competing runtime environment,
+sandbox, or Node.js distribution for commercial purposes.
+
+5. MODIFICATIONShttps://github.com/Aissamohammedi88/toolkit/community/license/new?branch=main
+Any modified version must be clearly marked as such and must not be
+represented as the original Nexus Sovereign Runtime. Modified versions
+fall under the exact same restrictions as the original.
+
+6. TERMINATION
+Violation of any of these terms immediately and automatically terminates the
+User's rights under this license. The User must destroy all copies of the
+Software immediately.
+
+7. NO WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. THE AUTHOR
+IS NOT LIABLE FOR ANY DAMAGES ARISING FROM THE USE OF THIS SOFTWARE.
+
+Contact for commercial licensing: Aissa Mohammedi (DGK) — Nexus Quantum Organization.
