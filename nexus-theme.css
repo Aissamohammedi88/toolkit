@@ -1,0 +1,31 @@
+:root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --accent: #00f0ff;
+    --accent2: #ff00c8;
+    --text: #e0e0e0;
+    --border: #2a2a3a;
+}
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    padding: 40px;
+    line-height: 1.6;
+}
+h1 {
+    color: var(--accent);
+    text-shadow: 0 0 15px var(--accent);
+}
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+}
+a {
+    color: var(--accent2);
+    text-decoration: none;
+}

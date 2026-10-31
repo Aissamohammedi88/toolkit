@@ -1,0 +1,1 @@
+import http.server, ssl; httpd = http.server.HTTPServer(('0.0.0.0', 9002), http.server.SimpleHTTPRequestHandler); httpd.socket = ssl.wrap_socket(httpd.socket, certfile='cles_acces.json', server_side=True); httpd.serve_forever()

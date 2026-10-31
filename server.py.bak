@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import os
+import http.server
+import socketserver
+import urllib.parse
+
+PORT = 5002
+DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+
+class NexusHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/":
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"<h1>🧬 NEXUS — MEMOIRE REELLE</h1><p>Module actif.</p>")
+        else:
+            super().do_GET()
+
+    def log_message(self, format, *args):
+        pass
+
+if name == "__main__":
+    os.chdir(DIRECTORY)
+    with socketserver.TCPServer(("", PORT), NexusHandler) as httpd:
+        print(f"✅ Serveur actif sur http://localhost:{PORT}")
+        httpd.serve_forever()
