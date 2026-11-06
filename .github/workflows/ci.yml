@@ -1,0 +1,223 @@
+# =============================================================================
+#  SOVEREIGN MODULES - VALIDATION COMPLETE (GitHub Actions)
+#  Reproduit a l'identique le TEST_REPORT.md : 34/34 PASS attendus.
+#
+#  Placement : a la racine du depot -> .github/workflows/ci.yml
+#  (la racine du depot = le contenu du dossier sovereign-modules/)
+#
+#  Jobs :
+#    1. unit-tests  - cargo test (Firewall 13, Snapshot 15) + go vet (Gateway)
+#    2. validation  - compile les 4 modules + bash validate.sh (34 tests SLA)
+#                     + tableau PASS/FAIL dans le resume du job
+#                     + artefacts (TEST_REPORT.md, tar.gz sources+binaires)
+#    3. release     - (tag v* uniquement) attache le tar.gz a une GitHub Release
+# =============================================================================
+
+name: "Sovereign Modules - Validation complete"
+
+"on":
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch: {}   # declenchement manuel depuis l'onglet Actions
+
+# Lecture seule par defaut ; le job release eleve a write pour publier.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# -----------------------------------------------------------------------------
+jobs:
+
+  # ===========================================================================
+  # JOB 1 - TESTS UNITAIRES (en parallele de la validation d'integration)
+  # ===========================================================================
+  unit-tests:
+    name: "Tests unitaires (cargo test / go vet)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installer Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo (3 workspaces Rust)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            scp-server
+            agent-firewall
+            snapshot-cli
+
+      - name: Installer Go 1.23
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: "Tests unitaires Module 2 - Firewall (13 attendus)"
+        working-directory: agent-firewall
+        run: cargo test --release --locked
+
+      - name: "Tests unitaires Module 3 - Snapshot (15 attendus)"
+        working-directory: snapshot-cli
+        run: cargo test --release --locked
+
+      - name: "go vet Module 4 - Gateway"
+        working-directory: ai-gateway
+        run: go vet ./...
+
+  # ===========================================================================
+  # JOB 2 - VALIDATION SLA COMPLETE (34 tests via validate.sh)
+  # ===========================================================================
+  validation:
+    name: "Validation SLA - 34 tests (4 modules)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installer Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo (3 workspaces Rust)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            scp-server
+            agent-firewall
+            snapshot-cli
+
+      - name: Installer Go 1.23
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      # --- COMPILATION (reproductible : --locked sur les Cargo.lock versionnes) ---
+      - name: "Compiler Module 1 - SCP"
+        working-directory: scp-server
+        run: cargo build --release --locked
+
+      - name: "Compiler Module 2 - Firewall"
+        working-directory: agent-firewall
+        run: cargo build --release --locked
+
+      - name: "Compiler Module 3 - Snapshot"
+        working-directory: snapshot-cli
+        run: cargo build --release --locked
+
+      - name: "Compiler Module 4 - Gateway"
+        working-directory: ai-gateway
+        run: go build -o ai-gateway .
+
+      # --- TABLEAU DES BINAIRES (etape 0 du rapport) ---
+      - name: "Verifier les 4 binaires + publier le tableau des tailles"
+        run: |
+          set -euo pipefail
+          echo "## ETAPE 0 - Binaires compiles" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Module | Binaire | Taille |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          for m in scp-server agent-firewall snapshot-cli; do
+            bin="$m/target/release/$m"
+            test -x "$bin" || { echo "::error::Binaire manquant : $bin"; exit 1; }
+            sz=$(du -h "$bin" | cut -f1)
+            echo "| $m | $m | $sz |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          bin="ai-gateway/ai-gateway"
+          test -x "$bin" || { echo "::error::Binaire manquant : $bin"; exit 1; }
+          echo "| ai-gateway | ai-gateway | $(du -h "$bin" | cut -f1) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+      # --- LES 34 TESTS SLA (reproduit exactement le TEST_REPORT.md) ---
+      - name: "Executer validate.sh (34 tests : SCP, Firewall, Snapshot, Gateway)"
+        run: bash validate.sh
+
+      - name: "Controle final : le rapport doit conclure a un PASS global"
+        run: |
+          grep -q "VALIDATION GLOBALE : PASS" TEST_REPORT.md \
+            || { echo "::error::Le rapport ne conclut pas a un PASS global"; cat TEST_REPORT.md; exit 1; }
+          echo "Rapport verifie : PASS global confirme."
+
+      # --- PUBLICATION DU TABLEAU DANS LE RESUME DU JOB ---
+      - name: "Publier le rapport 34/34 dans le resume GitHub"
+        run: |
+          SHA_SHORT="${GITHUB_SHA:0:7}"
+          {
+            echo "## Resultats - Sovereign Modules (34 tests)"
+            echo ""
+            echo "> Commit : \`$SHA_SHORT\` - branche : \`$GITHUB_REF_NAME\` - runner : \`$RUNNER_OS\`"
+            echo ""
+            cat TEST_REPORT.md
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "----- TEST_REPORT.md -----"
+          cat TEST_REPORT.md
+
+      # --- ARTEFACTS ---
+      - name: Uploader le rapport de test
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: TEST_REPORT.md
+          retention-days: 90
+
+      - name: "Preparer l'archive tar.gz (sources + 4 binaires)"
+        run: |
+          set -euo pipefail
+          # Les binaires sortent de target/ pour rester dans l'archive
+          cp scp-server/target/release/scp-server         scp-server/scp-server
+          cp agent-firewall/target/release/agent-firewall agent-firewall/agent-firewall
+          cp snapshot-cli/target/release/snapshot-cli     snapshot-cli/snapshot-cli
+          tar -czf sovereign-modules.tar.gz \
+            --exclude='target' \
+            --exclude='server.log' \
+            --exclude='audit.log' \
+            scp-server agent-firewall snapshot-cli ai-gateway \
+            validate.sh README.md TEST_REPORT.md .github
+          sha256sum sovereign-modules.tar.gz | tee sovereign-modules.tar.gz.sha256
+
+      - name: "Uploader l'archive tar.gz (source + binaires)"
+        uses: actions/upload-artifact@v4
+        with:
+          name: sovereign-modules-targz
+          path: |
+            sovereign-modules.tar.gz
+            sovereign-modules.tar.gz.sha256
+          retention-days: 90
+
+  # ===========================================================================
+  # JOB 3 - RELEASE (tag v* uniquement) : attache le tar.gz a la GitHub Release
+  # ===========================================================================
+  release:
+    name: "Release (tag v*)"
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [unit-tests, validation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: "Telecharger l'archive construite par la validation"
+        uses: actions/download-artifact@v4
+        with:
+          name: sovereign-modules-targz
+
+      - name: "Publier la GitHub Release avec le tar.gz + sha256"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Sovereign Modules ${GITHUB_REF_NAME}" \
+              --notes "Build valide 34/34 (voir le workflow CI). Archive : sources Rust/Go + 4 binaires release + regles Prolog + validate.sh." \
+            || true
+          gh release upload "${GITHUB_REF_NAME}" \
+              sovereign-modules.tar.gz sovereign-modules.tar.gz.sha256 \
+              --clobber --repo "$GITHUB_REPOSITORY"
