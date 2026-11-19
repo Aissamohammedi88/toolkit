@@ -1,0 +1,397 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+NERCEL v10.0 — CLI
+Commandes :
+  nercel register <user> <pass> [email]
+  nercel login <user> <pass>
+  nercel whoami
+  nercel status
+  nercel list
+  nercel deploy <zip> [--name X] [--env Production]
+  nercel ai "question"            # GLM Flash
+  nercel image "prompt"           # Pollinations → ouvre l'image
+  nercel gh-repos                 # dépôts GitHub connectés
+  nercel gh-deploy <repo_url> [--name X]
+  nercel logs [-f]
+  nercel features
+"""
+import sys, os, json, urllib.request, urllib.error, argparse, time, webbrowser
+
+API = os.environ.get("NERCEL_API", "http://127.0.0.1:3923")
+EDGE = os.environ.get("NERCEL_EDGE", "http://127.0.0.1:8765")
+DATA = os.environ.get("NERCEL_DATA", os.path.expanduser("~/.nercel"))
+TOKEN_FILE = os.path.join(DATA, "cli_token")
+
+G="\033[0;32m"; R="\033[0;31m"; Y="\033[1;33m"; C="\033[0;36m"; D="\033[2m"; B="\033[1m"; N="\033[0m"
+
+def save_token(t):
+    os.makedirs(DATA, exist_ok=True)
+    open(TOKEN_FILE,"w").write(t); os.chmod(TOKEN_FILE, 0o600)
+
+def token():
+    try: return open(TOKEN_FILE).read().strip()
+    except Exception: return None
+
+def req(method, path, body=None, ctype=None, with_auth=True):
+    url = API + path
+    data = body if isinstance(body, bytes) else (body.encode() if isinstance(body,str) else (json.dumps(body).encode() if body else None))
+    r = urllib.request.Request(url, data=data, method=method)
+    if ctype: r.add_header("Content-Type", ctype)
+    if with_auth:
+        t = token()
+        if t: r.add_header("Cookie", f"nercel_session={t}")
+    try:
+        with urllib.request.urlopen(r, timeout=60) as resp:
+            tk = None
+            for h in resp.headers.get_all("Set-Cookie") or []:
+                if "nercel_session=" in h:
+                    tk = h.split("nercel_session=")[1].split(";")[0]
+            return resp.status, resp.read(), tk
+    except urllib.error.HTTPError as e:
+        return e.code, e.read(), None
+    except Exception as e:
+        return 0, str(e).encode(), None
+
+def jget(path, auth=True):
+    code, body, _ = req("GET", path, with_auth=auth)
+    if code == 0:
+        print(f"{R}orchestrateur injoignable ({API}). Lance : bash start.sh{N}"); sys.exit(1)
+    try: return code, json.loads(body)
+    except Exception: return code, {}
+
+# ---------- commandes ----------
+def cmd_register(a):
+    body = json.dumps({"username":a.user,"password":a.passwd,"email":a.email or ""}).encode()
+    code, resp, tk = req("POST","/api/auth/register",body,"application/json",with_auth=False)
+    if code==201 and tk: save_token(tk); print(f"{G}✓ compte créé, connecté{N}")
+    else: print(f"{R}échec ({code}){N} {resp.decode('utf-8','ignore')}"); sys.exit(1)
+
+def cmd_login(a):
+    body = json.dumps({"username":a.user,"password":a.passwd}).encode()
+    code, resp, tk = req("POST","/api/auth/login",body,"application/json",with_auth=False)
+    if code==200 and tk:
+        save_token(tk); print(f"{G}✓ connecté{N}  (token sauvé dans {TOKEN_FILE})")
+    else:
+        print(f"{R}identifiants invalides{N}"); sys.exit(1)
+
+def cmd_whoami(a):
+    code, d = jget("/api/auth/me")
+    u = d.get("user")
+    if u: print(f"{C}connecté{N}  {u['username']}  (id {u['id']})  {u.get('email','')}")
+    else: print(f"{D}non connecté — nercel login <user> <pass>{N}")
+
+def cmd_status(a):
+    code, d = jget("/api/status", auth=False)
+    u = d.get("user")
+    print(f"{C}NERCEL v10.0{N}  user={u['username'] if u else '(anonyme)'}")
+    print(f"  projets      : {len(d.get('projects',[]))}  ({d.get('running',0)} running)")
+    print(f"  déploiements : {d.get('deployments',0)}")
+    print(f"  CPU/RAM      : {d.get('cpu',0)}% / {d.get('ram',0)}%")
+    print(f"  requêtes     : {d.get('requests',0)}")
+    print(f"  features     : {d.get('features',0)}")
+
+def cmd_list(a):
+    code, d = jget("/api/projects")
+    projs = d.get("projects",[])
+    if not projs: print(f"{D}aucun projet{N}"); return
+    print(f"{C}{'NOM':<18}{'FW':<10}{'STATUS':<10}URL{N}")
+    for p in projs:
+        sc = G if p["status"]=="running" else D
+        print(f"{p['name']:<18}{p.get('framework','?'):<10}{sc}{p['status']:<10}{N}{EDGE}/{p['name']}/")
+
+def cmd_deploy(a):
+    if not os.path.exists(a.file): print(f"{R}fichier introuvable{N}"); sys.exit(1)
+    name = a.name or os.path.splitext(os.path.basename(a.file))[0]
+    b = f"nercel{int(time.time()*1000)}".encode()
+    body = (f"--{b.decode()}\r\nContent-Disposition: form-data; name=\"name\"\r\n\r\n{name}\r\n"
+            f"--{b.decode()}\r\nContent-Disposition: form-data; name=\"env\"\r\n\r\n{a.env}\r\n"
+            f"--{b.decode()}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{os.path.basename(a.file)}\"\r\n"
+            f"Content-Type: application/zip\r\n\r\n").encode()
+    body += open(a.file,"rb").read()
+    body += f"\r\n--{b.decode()}--\r\n".encode()
+    code, resp, _ = req("POST","/api/deploy",body,f"multipart/form-data; boundary={b.decode()}")
+    if code==202:
+        d=json.loads(resp)
+        print(f"{G}✓ déployé{N}  {d['name']} ({d['framework']})  :{d['port']}  {d['commit']}")
+        print(f"  edge : {EDGE}/{d['name']}/")
+    else: print(f"{R}échec ({code}){N} {resp.decode('utf-8','ignore')}"); sys.exit(1)
+
+def cmd_ai(a):
+    code, d = jget("/api/auth/me")
+    payload = {"messages":[{"role":"user","content":a.prompt}]}
+    if getattr(a, "model", None): payload["model"] = a.model
+    body = json.dumps(payload).encode()
+    code, resp, _ = req("POST","/api/ai/chat",body,"application/json",with_auth=False)
+    if code==200:
+        d=json.loads(resp)
+        print(f"{C}[{d.get('provider') or d.get('model','?')}]{N}\n")
+        print(d["reply"])
+    else: print(f"{R}échec ({code}){N} {resp.decode('utf-8','ignore')}")
+
+def cmd_image(a):
+    code, resp, _ = req("GET","/api/ai/image?prompt="+urllib.parse.quote(a.prompt), with_auth=False)
+    if code==200:
+        d=json.loads(resp); url=API+d["image"]
+        print(f"{G}✓ image générée{N}  {url}  ({d['size']} octets)")
+        try: webbrowser.open(url)
+        except Exception: pass
+    else: print(f"{R}échec{N}")
+
+def cmd_gh_repos(a):
+    code, d = jget("/api/github/repos")
+    repos = d.get("repos",[])
+    if d.get("connected") is False: print(f"{R}GitHub non connecté{N}"); sys.exit(1)
+    if not repos: print(f"{D}aucun dépôt{N}"); return
+    print(f"{C}{'DÉPÔT':<28}{'LANG':<10}⭐  URL{N}")
+    for r in repos:
+        print(f"{r['name'][:26]:<28}{(r['lang'] or '—'):<10}{r['stars']:<3} {r['url']}")
+
+def cmd_gh_deploy(a):
+    name = a.name or a.repo.rstrip("/").split("/")[-1].replace(".git","")
+    body = json.dumps({"repo_url":a.repo,"name":name,"env":a.env or "Production"}).encode()
+    code, resp, _ = req("POST","/api/github/deploy",body,"application/json")
+    if code==202:
+        d=json.loads(resp)
+        print(f"{G}✓ cloné+déployé{N}  {d['name']} ({d['framework']})  :{d['port']}")
+        print(f"  edge : {EDGE}/{d['name']}/")
+    else: print(f"{R}échec ({code}){N} {resp.decode('utf-8','ignore')}"); sys.exit(1)
+
+def cmd_logs(a):
+    if not a.f:
+        code, d = jget("/api/logs")
+        for l in d.get("logs",[]):
+            c={"info":C,"warn":Y,"err":R}.get(l.get("level","info"),N)
+            print(f"{D}{l.get('ts','')}{N} {c}{l.get('level','').upper()[:4]:<4}{N} {l.get('msg','')}")
+        return
+    url = API+"/api/logs/stream"
+    try:
+        r = urllib.request.urlopen(url, timeout=None)
+        buf=b""
+        while True:
+            ch = r.read(1)
+            if not ch: break
+            buf += ch
+            if buf.endswith(b"\n\n"):
+                for line in buf.split(b"\n"):
+                    if line.startswith(b"data: "):
+                        try:
+                            l=json.loads(line[6:])
+                            c={"info":C,"warn":Y,"err":R}.get(l.get("level","info"),N)
+                            print(f"{D}{l.get('ts','')}{N} {c}{l.get('level','').upper()[:4]:<4}{N} {l.get('msg','')}")
+                        except Exception: pass
+                buf=b""
+    except KeyboardInterrupt: print("\nstop.")
+
+def cmd_features(a):
+    code, d = jget("/api/features", auth=False)
+    sprints={}
+    for f in d.get("features",[]): sprints.setdefault(f.get("sprint",0),[]).append(f)
+    for sp in sorted(sprints):
+        items=sprints[sp]
+        print(f"\n{C}Sprint {sp} ({len(items)}){N}")
+        for f in items:
+            ic = G if f["status"]=="active" else Y
+            sym = "●" if f["status"]=="active" else "◐"
+            print(f"  {ic}{sym}{N} #{f['id']:>2} {f['name']}")
+    print(f"\n{G}Total : {d.get('total',0)} fonctionnalités en 4 sprints{N}")
+
+# ---------- AGENTS ----------
+def cmd_agent_list(a):
+    code, d = jget("/api/agents")
+    ags = d.get("agents",[])
+    if not ags: print(f"{D}aucun agent — nercel agent create --name X{N}"); return
+    print(f"{C}{'ID':<4}{'NOM':<22}{'MODÈLE':<14}PERSONA{N}")
+    for x in ags:
+        print(f"{x['id']:<4}{x['name'][:20]:<22}{x['model']:<14}{x['persona']}")
+    print(f"\n{D}templates : {', '.join(t['name'] for t in d.get('templates',[]))}{N}")
+
+def cmd_agent_create(a):
+    body = json.dumps({"name":a.name,"system":a.system or "Tu es un assistant utile.",
+                       "model":a.model,"persona":"assistant"}).encode()
+    code, resp, _ = req("POST","/api/agents",body,"application/json")
+    d = json.loads(resp)
+    if code==201: print(f"{G}✓ agent créé #{d['id']}{N}  teste : nercel agent chat {d['id']} \"salut\"")
+    else: print(f"{R}échec{N} {resp.decode('utf-8','ignore')}")
+
+def cmd_agent_chat(a):
+    body = json.dumps({"messages":[{"role":"user","content":a.message}]}).encode()
+    code, resp, _ = req("POST",f"/api/agents/{a.id}/chat",body,"application/json")
+    if code==200:
+        d = json.loads(resp)
+        print(f"{C}[{d.get('agent','agent')} · {d.get('model','?')}]{N}\n")
+        print(d.get("reply",""))
+    else: print(f"{R}échec ({code}){N} {resp.decode('utf-8','ignore')}")
+
+def cmd_agent_delete(a):
+    code, resp, _ = req("POST",f"/api/agents/{a.id}/delete")
+    d = json.loads(resp)
+    print(f"{G if d.get('ok') else R}{'✓' if d.get('ok') else '✗'}{N} agent #{a.id}")
+
+import urllib.parse
+
+# ===================== CONFIG (registre 200 options) =====================
+def cmd_config(args):
+    sub = args.config_cmd
+    if sub == "list":
+        code, d = jget("/api/config", auth=False)
+        opts = d.get("options", [])
+        cat = args.category
+        if cat: opts = [o for o in opts if o["category"] == cat]
+        cats = d.get("categories", [])
+        print(f"{G}✓{N} {len(opts)} option(s)" + (f" ({cat})" if cat else f" sur {len(cats)} catégories"))
+        cur = None
+        for o in opts:
+            if o["category"] != cur:
+                cur = o["category"]; print(f"\n{B}{cur}{N}")
+            v = o["value"]
+            if o.get("secret") and v: v = "••••"
+            ch = f" [{', '.join(o['choices'])}]" if o.get("choices") else ""
+            print(f"  {o['key']:<34} = {v}{ch}")
+            print(f"    {D}{o['desc']}{N}")
+    elif sub == "get":
+        code, d = jget(f"/api/config/{urllib.parse.quote(args.key)}", auth=False)
+        if "error" in d: print(f"{R}✗ {d['error']}{N}")
+        else:
+            v = d["value"]
+            if d.get("secret") and v: v = "••••"
+            print(f"{G}✓{N} {d['key']} = {v}")
+            print(f"    {D}{d['desc']}{N}")
+    elif sub == "set":
+        code, body, _ = req("POST", "/api/config", body={"key": args.key, "value": args.value}, ctype="application/json")
+        d = json.loads(body) if body else {}
+        print(f"{G}✓{N} {d.get('message','')}" if d.get("ok") else f"{R}✗ {d.get('message', d.get('error','échec'))}{N}")
+    elif sub == "reset":
+        code, body, _ = req("POST", f"/api/config/{urllib.parse.quote(args.key)}/reset", body={}, ctype="application/json")
+        d = json.loads(body) if body else {}
+        print(f"{G}✓{N} {d.get('message','')}" if d.get("ok") else f"{R}✗ {d.get('message', d.get('error','échec'))}{N}")
+
+# ===================== V10 : hub IA / scaffolds / devops =====================
+def cmd_provs(a):
+    code, d = jget("/api/ai/providers", auth=False)
+    if code != 200: print(f"{R}✗ {d.get('error','échec')}{N}"); return
+    lm = d.get("local_models", [])
+    print(f"{G}✓{N} {d.get('total_cloud',0)} IA cloud keyless · {d.get('total_local_runtimes',0)} runtimes locaux surveillés")
+    print(f"\n{B}Runtimes locaux (auto-détection) :{N}")
+    for r in d.get("local", []):
+        st = "🟢 en ligne" if r.get("alive") else "⚪ silencieux"
+        print(f"  {st:<16} {r['name']:<15} {r['base']}")
+        print(f"  {'':<16} {D}{r.get('note','')}{N}")
+    if lm:
+        print(f"\n{B}Modèles locaux détectés :{N}")
+        for m in lm[:20]: print(f"  {C}{m['id']}{N}  ({m['runtime']})")
+    print(f"\n{B}Cloud sans clé :{N}")
+    seen = set()
+    for c in d.get("cloud", []):
+        if c["id"] in seen: continue
+        seen.add(c["id"])
+        print(f"  {c['id']:<36} {D}{c.get('desc','')[:60]}{N}")
+
+def cmd_scaffold(a):
+    if a.list:
+        code, d = jget("/api/scaffolds", auth=False)
+        print(f"{G}✓{N} {len(d.get('scaffolds',[]))} templates :")
+        for s in d.get("scaffolds", []):
+            print(f"  {C}{s['id']:<12}{N} {s['name']:<28} {D}{s['desc'][:58]}{N}")
+        return
+    if not a.template:
+        print(f"{R}✗ template requis (voir : nercel scaffold --list){N}"); return
+    body = {"template": a.template}
+    if a.name: body["name"] = a.name
+    code, resp, _ = req("POST", "/api/scaffold", body=body, ctype="application/json")
+    d = json.loads(resp) if resp else {}
+    if code in (200, 202):
+        print(f"{G}✓{N} {d.get('name')} ({d.get('framework')}) → port :{d.get('port')} · commit {d.get('commit','')[:7]}")
+        h = d.get("hooks") or {}
+        if h.get("pre") or h.get("post"): print(f"  hooks : pre={'✓' if h.get('pre_ok') else '✗'} post={'✓' if h.get('post_ok') else '✗'}")
+    else:
+        print(f"{R}✗ {d.get('error','échec')}{N}")
+
+def cmd_gen(a):
+    if not a.kind:
+        code, d = jget("/api/generators", auth=False)
+        print(f"{G}✓{N} générateurs :")
+        for g in d.get("generators", []):
+            print(f"  {C}{g['id']:<12}{N} {g['name']:<22} {D}{g['desc'][:56]}{N}")
+        return
+    body = {"kind": a.kind}
+    if a.name: body["name"] = a.name
+    if a.framework: body["framework"] = a.framework
+    code, resp, _ = req("POST", "/api/generate", body=body, ctype="application/json")
+    d = json.loads(resp) if resp else {}
+    if code == 200:
+        print(f"{G}✓{N} {d.get('file')} généré ({d.get('size')} octets) → {d.get('path')}")
+    else:
+        print(f"{R}✗ {d.get('error','échec')}{N}")
+
+def cmd_ollama(a):
+    import urllib.request as _ur
+    def _probe(url):
+        try:
+            _ur.urlopen(url, timeout=1.5).read(1); return True
+        except Exception: return False
+    online = _probe("http://127.0.0.1:11434/api/tags")
+    import shutil as _sh
+    binary = bool(_sh.which("ollama"))
+    if a.action == "status" or not a.action:
+        print(f"service  : {'🟢 en ligne (:11434)' if online else '⚪ arrêté'}")
+        print(f"binaire  : {'✓ installé' if binary else '✗ absent'}")
+        if online:
+            try:
+                with _ur.urlopen("http://127.0.0.1:11434/api/tags", timeout=2) as r:
+                    tags = json.loads(r.read()).get("models", [])
+                print(f"modèles  : {len(tags)}")
+                for m in tags: print(f"  {C}{m.get('name')}{N}")
+            except Exception as e: print(f"modèles  : ? ({e})")
+        if not online and not binary:
+            print(f"\n{Y}Installer :{N}\n  curl -fsSL https://ollama.com/install.sh | sh\n  ollama pull qwen2.5-coder:7b")
+        return
+    if not binary:
+        print(f"{R}✗ ollama absent — installe : curl -fsSL https://ollama.com/install.sh | sh{N}"); return
+    import subprocess as _sp, sys as _sys
+    if a.action == "install":
+        print(f"{Y}→ installation d'Ollama…{N}")
+        _sys.exit(_sp.call("curl -fsSL https://ollama.com/install.sh | sh", shell=True))
+    if a.action == "pull":
+        print(f"{Y}→ ollama pull {a.model}{N}")
+        _sys.exit(_sp.call(["ollama", "pull", a.model]))
+    if a.action == "serve":
+        print(f"{Y}→ ollama serve (arrière-plan){N}")
+        _sys.exit(_sp.call("nohup ollama serve >/dev/null 2>&1 &", shell=True))
+
+def main():
+    p = argparse.ArgumentParser(prog="nercel", description="CLI NERCEL v10.0 — hub IA 30+ modèles, scaffolds, devops")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("status").set_defaults(fn=cmd_status)
+    sub.add_parser("list").set_defaults(fn=cmd_list)
+    sub.add_parser("whoami").set_defaults(fn=cmd_whoami)
+    sub.add_parser("features").set_defaults(fn=cmd_features)
+    r = sub.add_parser("register"); r.add_argument("user"); r.add_argument("passwd"); r.add_argument("email",nargs="?"); r.set_defaults(fn=cmd_register)
+    l = sub.add_parser("login"); l.add_argument("user"); l.add_argument("passwd"); l.set_defaults(fn=cmd_login)
+    d = sub.add_parser("deploy"); d.add_argument("file"); d.add_argument("--name"); d.add_argument("--env",default="Production"); d.set_defaults(fn=cmd_deploy)
+    ai = sub.add_parser("ai"); ai.add_argument("prompt"); ai.add_argument("--model"); ai.set_defaults(fn=cmd_ai)
+    im = sub.add_parser("image"); im.add_argument("prompt"); im.set_defaults(fn=cmd_image)
+    ghr = sub.add_parser("gh-repos"); ghr.set_defaults(fn=cmd_gh_repos)
+    ghd = sub.add_parser("gh-deploy"); ghd.add_argument("repo"); ghd.add_argument("--name"); ghd.add_argument("--env"); ghd.set_defaults(fn=cmd_gh_deploy)
+    lg = sub.add_parser("logs"); lg.add_argument("-f",action="store_true"); lg.set_defaults(fn=cmd_logs)
+    # config (registre 200 options)
+    cf = sub.add_parser("config"); cf_sub = cf.add_subparsers(dest="config_cmd", required=True)
+    cfl = cf_sub.add_parser("list"); cfl.add_argument("--cat", dest="category"); cfl.set_defaults(fn=cmd_config)
+    cfg = cf_sub.add_parser("get"); cfg.add_argument("key"); cfg.set_defaults(fn=cmd_config)
+    cfs = cf_sub.add_parser("set"); cfs.add_argument("key"); cfs.add_argument("value"); cfs.set_defaults(fn=cmd_config)
+    cfr = cf_sub.add_parser("reset"); cfr.add_argument("key"); cfr.set_defaults(fn=cmd_config)
+    ag = sub.add_parser("agent"); ag_sub = ag.add_subparsers(dest="agent_cmd", required=True)
+    ag_sub.add_parser("list").set_defaults(fn=cmd_agent_list)
+    ac = ag_sub.add_parser("create"); ac.add_argument("--name",required=True); ac.add_argument("--system"); ac.add_argument("--model",default="auto"); ac.set_defaults(fn=cmd_agent_create)
+    agc = ag_sub.add_parser("chat"); agc.add_argument("id",type=int); agc.add_argument("message"); agc.set_defaults(fn=cmd_agent_chat)
+    agd = ag_sub.add_parser("delete"); agd.add_argument("id",type=int); agd.set_defaults(fn=cmd_agent_delete)
+    # v10
+    pv = sub.add_parser("provs"); pv.set_defaults(fn=cmd_provs)
+    sc = sub.add_parser("scaffold"); sc.add_argument("template",nargs="?"); sc.add_argument("--name"); sc.add_argument("--list",action="store_true"); sc.set_defaults(fn=cmd_scaffold)
+    gn = sub.add_parser("gen"); gn.add_argument("kind",nargs="?"); gn.add_argument("--name"); gn.add_argument("--framework"); gn.set_defaults(fn=cmd_gen)
+    ol = sub.add_parser("ollama"); ol.add_argument("action",nargs="?",choices=["status","install","pull","serve"]); ol.add_argument("--model",default="qwen2.5-coder:7b"); ol.set_defaults(fn=cmd_ollama)
+    args = p.parse_args()
+    args.fn(args)
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,7 @@
+# NERCEL v3.0 — Aucune dépendance pip requise.
+# 100 % Python 3.8+ stdlib (http.server, sqlite3, hashlib, secrets, zipfile, urllib…)
+#
+# Optionnel (non requis par NERCEL lui-même) :
+#   git            # déploiement depuis GitHub (git clone)
+#   z-ai           # chat GLM Flash (CLI z.ai SDK)
+#   cryptography   # chiffrement au repos du token GitHub (Fernet) — production

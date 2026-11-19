@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NERCEL v10.0 — Documentation</title>
+<style>
+:root{--bg:#000;--bg2:#070707;--panel:#0d0d0f;--border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.12);--text:#f4f4f5;--text2:#a1a1aa;--text3:#6b6b73;--cyan:#38bdf8;--green:#22e07a;--purple:#a78bfa;--yellow:#f5b945;--mono:'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:900px;margin:0 auto;padding:48px 24px 80px}
+.hd{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.logo{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;background:linear-gradient(135deg,#38bdf8,#a78bfa,#f472b6);color:#000;font-weight:900;border-radius:9px;font-size:18px;box-shadow:0 0 24px rgba(56,189,248,.35)}
+h1{font-size:30px;font-weight:800;letter-spacing:-.6px}
+.h1v{color:var(--green);font-family:var(--mono);font-size:14px;background:rgba(34,224,122,.1);padding:3px 8px;border-radius:6px;border:1px solid rgba(34,224,122,.2)}
+.lede{color:var(--text2);font-size:15px;margin:14px 0 32px;max-width:620px}
+h2{font-size:21px;font-weight:800;margin:40px 0 14px;letter-spacing:-.3px;padding-top:18px;border-top:1px solid var(--border)}
+h2:first-of-type{border:none;padding:0}
+h3{font-size:15px;font-weight:700;margin:22px 0 10px;color:var(--text)}
+p{color:var(--text2);margin:8px 0}
+code,.mono{font-family:var(--mono);font-size:12.5px}
+inlinecode{font-family:var(--mono);font-size:12.5px;background:rgba(56,189,248,.12);color:var(--cyan);padding:1px 6px;border-radius:5px;border:1px solid rgba(56,189,248,.18)}
+pre{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:14px 16px;overflow-x:auto;margin:12px 0;font-family:var(--mono);font-size:12.5px;color:var(--text);line-height:1.55}
+pre .c{color:var(--text3)}
+pre .k{color:var(--purple)}
+pre .s{color:var(--green)}
+table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0}
+th{text-align:left;padding:10px 12px;color:var(--text3);font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:700;border-bottom:1px solid var(--border2);background:var(--panel)}
+td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:top}
+td:first-child{color:var(--cyan);font-family:var(--mono);font-size:12px;white-space:nowrap}
+tr:hover td{background:rgba(255,255,255,.02)}
+ul{color:var(--text2);margin:8px 0 8px 22px}
+li{margin:5px 0}
+.card{background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--border);border-radius:11px;padding:18px 20px;margin:14px 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:11px;margin-right:5px}
+.pill.get{background:rgba(34,224,122,.14);color:var(--green)}
+.pill.post{background:rgba(56,189,248,.14);color:var(--cyan)}
+.pill.sse{background:rgba(167,139,250,.14);color:var(--purple)}
+.foot{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);color:var(--text3);font-size:12px;font-family:var(--mono)}
+@media(max-width:640px){.grid{grid-template-columns:1fr}.wrap{padding:28px 16px}h1{font-size:24px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hd"><span class="logo">N</span><h1>NERCEL <span class="h1v">v10.0</span></h1></div>
+  <p class="lede">Plateforme de déploiement self-hosted, 100% locale, 0 dépendance externe (Python stdlib uniquement). Edge NEXUS, constructeur d'agents IA, monitoring temps réel, 100 services. Cette doc couvre l'architecture, l'API REST, le CLI, et le déploiement.</p>
+
+  <h2>Démarrage rapide</h2>
+  <pre><span class="c"># 1. installer (le tar.gz est embarqué dans le script)</span>
+bash installateur-nercel-v6.sh
+
+<span class="c"># 2. depuis le dossier installé</span>
+bash ~/nercel-10.0/start.sh          <span class="c"># démarre orchestrateur + edge</span>
+bash ~/nercel-10.0/start.sh --stop   <span class="c"># arrête</span>
+bash ~/nercel-10.0/start.sh --status <span class="c"># état</span>
+
+<span class="c"># 3. créer un compte + utiliser le CLI</span>
+nercel register alice secret1 a@b.c
+nercel ai "explique-moi le rolling deploy"
+nercel deploy ./app.zip --name monapp</pre>
+  <p>Le dashboard s'ouvre sur <inlinecode>http://127.0.0.1:3923/</inlinecode>, l'edge sur <inlinecode>http://127.0.0.1:8765/</inlinecode>. Connexion PBKDF2 (200k itérations), sessions cookie 7 jours, données dans <inlinecode>~/.nercel/</inlinecode>.</p>
+
+  <h2>Architecture</h2>
+  <div class="grid">
+    <div class="card"><h3>Orchestrateur <code>:3923</code></h3><p>Serveur HTTP threaded (stdlib <code>http.server</code>) qui sert le dashboard, l'API REST, l'auth, le SSE logs, et le runtime de déploiement. SQLite (<code>~/.nercel/deploy.db</code>) pour users, sessions, projets, agents, audit.</p></div>
+    <div class="card"><h3>Edge NEXUS <code>:8765</code></h3><p>Reverse proxy / CDN / WAF local. Route <code>/&lt;project&gt;/...</code> vers le port interne du projet. Cache RAM LRU (128 entrées), compression gzip, rate limiting (100/min/IP), WAF SQLi/XSS/traversal.</p></div>
+    <div class="card"><h3>Runtime projets</h3><p>Détection auto du framework (Next, React, Vite, Django, Flask, FastAPI, Laravel, statique). Démarrage via <code>npm start</code>, <code>python app.py</code>, ou serveur statique. Port libre attribué automatiquement.</p></div>
+    <div class="card"><h3>IA</h3><p>Chat via <code>z-ai</code> (GLM Flash) si disponible, sinon repli Pollinations. Génération d'images via Pollinations (flux, gratuit). Agents = prompts système + persona + température, endpoints publics optionnels.</p></div>
+  </div>
+
+  <h2>API REST</h2>
+  <p>Toutes les routes <code>/api/*</code> renvoient du JSON. Les routes authentifiées utilisent le cookie <inlinecode>nercel_session</inlinecode>. CORS <inlinecode>*</inlinecode> avec credentials.</p>
+  <table>
+    <thead><tr><th>Endpoint</th><th>Méthode</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>/api/health</td><td><span class="pill get">GET</span></td><td>Santé publique : <code>{status, uptime, version}</code></td></tr>
+      <tr><td>/api/system</td><td><span class="pill get">GET</span></td><td>Gauges live : CPU, RAM, requêtes, latence edge, régions, DB size</td></tr>
+      <tr><td>/api/features</td><td><span class="pill get">GET</span></td><td>Les 100 services (4 sprints) avec statut</td></tr>
+      <tr><td>/api/auth/register</td><td><span class="pill post">POST</span></td><td>Crée un compte + session cookie</td></tr>
+      <tr><td>/api/auth/login</td><td><span class="pill post">POST</span></td><td>Authentifie + session cookie</td></tr>
+      <tr><td>/api/auth/me</td><td><span class="pill get">GET</span></td><td>Utilisateur courant</td></tr>
+      <tr><td>/api/auth/logout</td><td><span class="pill post">POST</span></td><td>Déconnecte</td></tr>
+      <tr><td>/api/status</td><td><span class="pill get">GET</span></td><td>Projets, running, CPU/RAM, requêtes, uptime</td></tr>
+      <tr><td>/api/analytics</td><td><span class="pill get">GET</span></td><td>KPIs, séries (req/cpu/ram/latency), web vitals, trafic</td></tr>
+      <tr><td>/api/projects</td><td><span class="pill get">GET</span></td><td>Projets de l'utilisateur</td></tr>
+      <tr><td>/api/deployments</td><td><span class="pill get">GET</span></td><td>Historique des déploiements</td></tr>
+      <tr><td>/api/deploy</td><td><span class="pill post">POST</span></td><td>Déploie un zip (multipart : file, name, env)</td></tr>
+      <tr><td>/api/stop/&lt;name&gt;</td><td><span class="pill post">POST</span></td><td>Arrête un projet</td></tr>
+      <tr><td>/api/rollback/&lt;name&gt;</td><td><span class="pill post">POST</span></td><td>Rollback N-1</td></tr>
+      <tr><td>/api/logs/stream</td><td><span class="pill sse">SSE</span></td><td>Stream de logs live (tail -f navigateur)</td></tr>
+      <tr><td>/api/audit</td><td><span class="pill get">GET</span></td><td>Journal d'audit (qui/quand/quoi)</td></tr>
+      <tr><td>/api/agents</td><td><span class="pill get">GET</span> <span class="pill post">POST</span></td><td>Liste / crée un agent IA</td></tr>
+      <tr><td>/api/agents/&lt;id&gt;/chat</td><td><span class="pill post">POST</span></td><td>Teste un agent (messages)</td></tr>
+      <tr><td>/api/agent/&lt;id&gt;/ask?msg=</td><td><span class="pill get">GET</span></td><td>Endpoint public d'un agent</td></tr>
+      <tr><td>/api/ai/chat</td><td><span class="pill post">POST</span></td><td>Chat GLM Flash</td></tr>
+      <tr><td>/api/ai/image?prompt=</td><td><span class="pill get">GET</span></td><td>Génération image Pollinations</td></tr>
+      <tr><td>/api/github/connect</td><td><span class="pill post">POST</span></td><td>Connexion par Personal Access Token</td></tr>
+      <tr><td>/api/github/repos</td><td><span class="pill get">GET</span></td><td>Liste les dépôts</td></tr>
+      <tr><td>/api/github/deploy</td><td><span class="pill post">POST</span></td><td>Clone + déploie un dépôt</td></tr>
+      <tr><td>/metrics</td><td><span class="pill get">GET</span></td><td>Format Prometheus</td></tr>
+    </tbody>
+  </table>
+
+  <h2>CLI <code>nercel</code></h2>
+  <pre>nercel register &lt;user&gt; &lt;pass&gt; [email]   <span class="c"># crée un compte</span>
+nercel login &lt;user&gt; &lt;pass&gt;             <span class="c"># connecte (token sauvé)</span>
+nercel whoami                          <span class="c"># utilisateur courant</span>
+nercel status                          <span class="c"># état plateforme</span>
+nercel list                            <span class="c"># projets en ligne</span>
+nercel deploy &lt;zip&gt; [--name X] [--env Production]
+nercel ai "question"                   <span class="c"># GLM Flash</span>
+nercel image "prompt"                  <span class="c"># Pollinations → ouvre l'image</span>
+nercel agent list                      <span class="c"># agents</span>
+nercel agent create --name X --system "..." --model glm
+nercel agent chat &lt;id&gt; "message"
+nercel gh-repos                        <span class="c"># dépôts GitHub</span>
+nercel gh-deploy &lt;repo_url&gt; [--name X]
+nercel logs [-f]                       <span class="c"># logs, -f = live</span>
+nercel features                        <span class="c"># 100 services par sprint</span></pre>
+
+  <h2>Déploiement</h2>
+  <p>Deux flux : <b>zip drag &amp; drop</b> (page Deployments ou modale ⌘+New Deploy) ou <b>GitHub</b> (connect PAT → bouton Déployer sur un dépôt). Détection framework automatique :</p>
+  <ul>
+    <li><b>Node.js</b> : <code>package.json</code> → <code>npm install</code> + <code>npm start</code> (ou <code>next start</code>, <code>vite preview</code>)</li>
+    <li><b>Python</b> : <code>requirements.txt</code>/<code>app.py</code>/<code>manage.py</code> → Flask/Django/FastAPI détecté</li>
+    <li><b>Statique</b> : <code>index.html</code> → serveur statique instantané (&lt;2s)</li>
+  </ul>
+  <p>Chaque projet obtient un port interne + une route edge <inlinecode>http://127.0.0.1:8765/&lt;project&gt;/</inlinecode>. Rollback N-1 disponible. Health checks auto.</p>
+
+  <h2>Agents IA</h2>
+  <p>Un agent = un {nom, description, prompt système, modèle (GLM/Pollinations), persona, température, public?}. Création via le builder (page Agents) ou le CLI. Les agents publics exposent un endpoint HTTP :</p>
+  <pre>GET /api/agent/&lt;id&gt;/ask?msg=bonjour
+→ {"reply":"Bonjour ! Comment puis-je aider ?","model":"glm-flash","agent":"Mon agent"}</pre>
+  <p>Templates pré-configurés : Assistant NERCEL, Code Reviewer, DevOps SRE, Artiste, Rédacteur. Test live intégré dans le builder.</p>
+
+  <h2>Configuration (variables d'environnement)</h2>
+  <table>
+    <thead><tr><th>Variable</th><th>Défaut</th><th>Rôle</th></tr></thead>
+    <tbody>
+      <tr><td>NERCEL_DATA</td><td>~/.nercel</td><td>Dossier données (DB, projets, logs, IA)</td></tr>
+      <tr><td>NERCEL_PORT</td><td>3923</td><td>Port orchestrateur</td></tr>
+      <tr><td>NERCEL_EDGE_PORT</td><td>8765</td><td>Port edge NEXUS</td></tr>
+      <tr><td>NERCEL_API</td><td>http://127.0.0.1:3923</td><td>Base CLI</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Sécurité</h2>
+  <ul>
+    <li>Mots de passe : <b>PBKDF2-HMAC-SHA256, 200 000 itérations</b>, sel aléatoire par utilisateur</li>
+    <li>Sessions : token opaque 32 octets, cookie <code>HttpOnly</code>, TTL 7 jours</li>
+    <li>Edge WAF : SQLi, XSS, path traversal (chemin brut + décodé)</li>
+    <li>Rate limiting : 100 requêtes / 60s / IP</li>
+    <li>Audit log : chaque action sensible est tracée (acteur, action, cible, timestamp)</li>
+    <li>Données 100% locales — aucun envoi externe (sauf appel IA optionnel vers GLM/Pollinations)</li>
+  </ul>
+
+  <h2>Dépendances</h2>
+  <p><b>Requises</b> : Python 3.8+ (stdlib uniquement). <b>Optionnelles</b> : <code>git</code> (déploiement GitHub), <code>z-ai</code> (chat GLM Flash). Pollinations (images) fonctionne sans clé.</p>
+
+  <div class="foot">NERCEL v10.0 · self-hosted · 100% local · 0 dépendance externe · dashboard + edge + agents IA</div>
+</div>
+</body>
+</html>
