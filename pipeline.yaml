@@ -2,16 +2,16 @@ yaml
 name: CI
 stages:
   - name: build
-    image: node:20
+    image: node:24
     commands:
       - npm ci
       - npm run build
   - name: test
-    image: node:20
+    image: node:24
     commands:
       - npm test
   - name: deploy
-    image: node:20
+    image: node:24
     commands:
       - npm run deploy
     when: github.ref == 'refs/heads/main'
