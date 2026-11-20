@@ -1,0 +1,31 @@
+agent-ci/
+├─ src/
+│   ├─ cli/
+│   │   ├─ index.ts          # entry point
+│   │   └─ commands/
+│   │       ├─ generate.ts  # command to generate YAML
+│   │       └─ init.ts      # init project
+│   ├─ config/
+│   │   └─ schema.ts        # TypeScript interfaces for input
+│   ├─ generators/
+│   │   ├─ github-action.ts # generator class
+│   │   └─ gitlab-ci.ts     # other generators
+│   ├─ services/
+│   │   ├─ template.service.ts
+│   │   └─ git.service.ts   # wrapper around Octokit / GitLab API
+│   ├─ models/
+│   │   └─ pipeline.model.ts
+│   └─ utils/
+│       └─ file.util.ts
+├─ templates/
+│   ├─ github/
+│   │   └─ workflow.yml.ejs
+│   └─ gitlab/
+│       └─ .gitlab-ci.yml.ejs
+├─ tests/
+│   ├─ generators/
+│   └─ services/
+├─ .eslintrc.js
+├─ tsconfig.json
+├─ package.json
+└─ README.md
