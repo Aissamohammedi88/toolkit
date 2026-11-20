@@ -1,0 +1,22 @@
+## Fonction « git‑action‑auto‑gen‑v2 »  
+### Contexte  
+• Objectif : Générer automatiquement *toutes* les combinaisons possibles d’une GitHub Action (triggers, jobs, steps, variables) pour un dépôt donné, sans aucune intervention humaine.  
+• Pourquoi « impossible » :  
+  1. La fonction parcourt l’ensemble complet des possibilités – même celles qui n’auront jamais été envisagées par un développeur.  
+  2. Elle utilise l’apprentissage profond et la logique combinatoire pour produire des workflows qui restent valides selon la spécification GitHub Actions, mais qui ne seraient jamais écrits manuellement.  
+  3. Elle est capable d’évaluer l’impact de chaque workflow sur les ressources cloud (coût, temps de build, etc.) et de ne conserver que les *combinaisons* les plus optimales, un processus impossible à gérer à la main.
+
+---
+
+## 1. Stack technique
+
+| Couche | Technologie | Raison |
+|--------|-------------|--------|
+| Infrastructure | GitHub Enterprise (self‑hosted runner) + GitHub API | Accès complet aux métadonnées du dépôt et aux autorisations de workflow |
+| Runtime | Python 3.12 + Poetry | Gestion de dépendances reproductible, compatibilité avec GitHub Actions |
+| IA | HuggingFace transformer (GPT‑4‑turbo‑vision) + OpenAI GPT‑4o | Génération de code YAML et de tests de validité |
+| Orchestration | GitHub Actions (CI/CD) + Docker | Déploiement léger, isolation des dépendances |
+| Stockage | SQLite (temporaire) + GitHub Secrets | Pas besoin de BDD persistante, tout est exécuté sur le runner |
+| Sécurité | GitHub Secrets + Azure Key Vault | Gestion sécurisée des tokens d’accès |
+
+---
