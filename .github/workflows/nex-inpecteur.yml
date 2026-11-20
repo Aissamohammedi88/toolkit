@@ -10,12 +10,10 @@ permissions:
 issues: write
 steps:
 - uses: actions/checkout@v4
-
 - name: Generate recommendations
 id: recs
 run: |
 RECS=""
-
 [ -f "SECURITY.md" ] || RECS="$RECS\n- Ajouter SECURITY.md"
 [ -f "LICENSE" ] || RECS="$RECS\n- Ajouter LICENSE"
 [ -f "README.md" ] || RECS="$RECS\n- Ajouter README.md"
