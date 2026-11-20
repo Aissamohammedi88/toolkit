@@ -1,0 +1,32 @@
+name: Auto‑Generate GitHub Actions
+on:
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: ci
+    permissions:
+      contents: write
+      actions: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install poetry
+          poetry install --no-root
+
+      - name: Generate actions
+        env:
+          GIT_ACTION_TOKEN: ${{ secrets.GIT_ACTION_TOKEN }}
+        run: |
+          python -m src.generator --repo $GITHUB_REPOSITORY --token $GIT_ACTION_TOKEN
+        
